@@ -1362,6 +1362,31 @@ Value gettransaction(const Array& params, bool fHelp)
     return entry;
 }
 
+Value getanytransaction(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "getanytransaction <txid>\n"
+            "Get information about <txid>. (Not restricted to wallet)");
+
+    uint256 hash;
+    hash.SetHex(params[0].get_str());
+
+    // construct COutPoint to satisfy ReadFromDisk method
+    COutPoint dummyOutp(hash, 0);
+    CMerkleTx mtx;
+    if (!mtx.ReadFromDisk(dummyOutp))
+        throw JSONRPCError(-5, "Invalid or not-yet-in-blockchain transaction id");
+    if (!mtx.SetMerkleBranch(NULL))
+        throw JSONRPCError(-5, "Could not obtain transaction information");
+
+    Object entry;
+    entry.push_back(Pair("confirmations", mtx.GetDepthInMainChain()));
+    entry.push_back(Pair("txid", mtx.GetHash().GetHex()));
+
+    return entry;
+}
+
 
 Value backupwallet(const Array& params, bool fHelp)
 {
@@ -1846,6 +1871,7 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("settxfee",               &settxfee),
     make_pair("getmemorypool",          &getmemorypool),
     make_pair("listsinceblock",        &listsinceblock),
+    make_pair("getanytransaction",      &getanytransaction),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 
