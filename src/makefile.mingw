@@ -72,7 +72,8 @@ OBJS= \
     obj/script.o \
     obj/util.o \
     obj/wallet.o
-
+    obj/rpc.o \
+    obj/rpcmonitor.o \
 
 all: bitcoind.exe
 

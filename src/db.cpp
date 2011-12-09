@@ -925,6 +925,9 @@ int CWalletDB::LoadWallet(CWallet* pwallet)
                 if (strKey == "fMinimizeOnClose")   ssValue >> fMinimizeOnClose;
                 if (strKey == "fUseProxy")          ssValue >> fUseProxy;
                 if (strKey == "addrProxy")          ssValue >> addrProxy;
+                if (strKey == "monitor_block")      ssValue >> setMonitorBlocks;
+                if (strKey == "monitor_tx")         ssValue >> setMonitorTx;
+
                 if (fHaveUPnP && strKey == "fUseUPnP")           ssValue >> fUseUPnP;
             }
             else if (strType == "minversion")

@@ -54,6 +54,7 @@
 #include <list>
 #include <deque>
 #include <map>
+#include <numeric>
 
 #ifdef WIN32
 #include <windows.h>
