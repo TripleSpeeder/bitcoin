@@ -4,4 +4,5 @@
 // file license.txt or http://www.opensource.org/licenses/mit-license.php.
 
 void ThreadRPCServer(void* parg);
+void ThreadHTTPPOST(void* parg);
 int CommandLineRPC(int argc, char *argv[]);

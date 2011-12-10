@@ -12,12 +12,14 @@
 #include <boost/iostreams/concepts.hpp>
 #include <boost/iostreams/stream.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast.hpp>
 #ifdef USE_SSL
-#include <boost/asio/ssl.hpp> 
+#include <boost/asio/ssl.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket> SSLStream;
 #endif
+#include <boost/xpressive/xpressive_dynamic.hpp>
 #include "json/json_spirit_reader_template.h"
 #include "json/json_spirit_writer_template.h"
 #include "json/json_spirit_utils.h"
@@ -40,6 +42,80 @@ static std::string strRPCUserColonPass;
 
 static int64 nWalletUnlockTime;
 static CCriticalSection cs_nWalletUnlockTime;
+
+string HTTPPost(const string& host, const string& path, const string& strMsg,
+                const map<string,string>& mapRequestHeaders);
+extern int ReadHTTP(std::basic_istream<char>& stream, map<string, string>& mapHeadersRet, string& strMessageRet);
+void ThreadHTTPPOST2(void* parg);
+
+
+class CPOSTRequest
+{
+public:
+    CPOSTRequest(const string &_url, const string& _body) : url(_url), body(_body)
+    {
+    }
+
+    virtual bool POST()
+    {
+        using namespace boost::xpressive;
+        // This regex is wrong for IPv6 urls; see http://www.ietf.org/rfc/rfc2732.txt
+        //  (they're weird; e.g  "http://[::FFFF:129.144.52.38]:80/index.html" )
+        // I can live with non-raw-IPv6 urls for now...
+        static sregex url_regex = sregex::compile("^(http|https)://([^:/]+)(:[0-9]{1,5})?(.*)$");
+
+        boost::xpressive::smatch urlparts;
+        if (!regex_match(url, urlparts, url_regex))
+        {
+            printf("URL PARSING FAILED: %s\n", url.c_str());
+            return true;
+        }
+        string protocol = urlparts[1];
+        string host = urlparts[2];
+        string s_port = urlparts[3];  // Note: includes colon, e.g. ":8080"
+        bool fSSL = (protocol == "https" ? true : false);
+        int port = (fSSL ? 443 : 80);
+        if (s_port.size() > 1) { port = atoi(s_port.c_str()+1); }
+        string path = urlparts[4];
+        map<string, string> headers;
+
+#ifdef USE_SSL
+        io_service io_service;
+        ssl::context context(io_service, ssl::context::sslv23);
+        context.set_options(ssl::context::no_sslv2);
+        SSLStream sslStream(io_service, context);
+        SSLIOStreamDevice d(sslStream, fSSL);
+        boost::iostreams::stream<SSLIOStreamDevice> stream(d);
+        if (!d.connect(host, boost::lexical_cast<string>(port)))
+        {
+            printf("POST: Couldn't connect to %s:%d", host.c_str(), port);
+            return false;
+        }
+#else
+        if (fSSL)
+        {
+            printf("Cannot POST to SSL server, bitcoin compiled without full openssl libraries.");
+            return false;
+        }
+        ip::tcp::iostream stream(host, boost::lexical_cast<string>(port));
+#endif
+
+        stream << HTTPPost(host, path, body, headers) << std::flush;
+        map<string, string> mapResponseHeaders;
+        string strReply;
+        int status = ReadHTTP(stream, mapResponseHeaders, strReply);
+//        printf(" HTTP response %d: %s\n", status, strReply.c_str());
+
+        return (status < 300);
+    }
+
+protected:
+    string url;
+    string body;
+};
+
+static vector<boost::shared_ptr<CPOSTRequest> > vPOSTQueue;
+static CCriticalSection cs_vPOSTQueue;
 
 
 Object JSONRPCError(int code, const string& message)
@@ -207,17 +283,16 @@ Value getconnectioncount(const Array& params, bool fHelp)
 }
 
 
-double GetDifficulty()
+double GetDifficulty(const CBlockIndex* blockindex = pindexBest)
 {
     // Floating point number that is a multiple of the minimum difficulty,
     // minimum difficulty = 1.0.
 
-    if (pindexBest == NULL)
+    if (blockindex == NULL)
         return 1.0;
-    int nShift = (pindexBest->nBits >> 24) & 0xff;
+    int nShift = (blockindex->nBits >> 24) & 0xff;
 
-    double dDiff =
-        (double)0x0000ffff / (double)(pindexBest->nBits & 0x00ffffff);
+    double dDiff = (double)0x0000ffff / (double)(blockindex->nBits & 0x00ffffff);
 
     while (nShift < 29)
     {
@@ -901,7 +976,7 @@ Value sendmany(const Array& params, bool fHelp)
 
         CScript scriptPubKey;
         scriptPubKey.SetBitcoinAddress(address);
-        int64 nAmount = AmountFromValue(s.value_); 
+        int64 nAmount = AmountFromValue(s.value_);
         totalAmount += nAmount;
 
         vecSend.push_back(make_pair(scriptPubKey, nAmount));
@@ -1200,7 +1275,7 @@ Value listtransactions(const Array& params, bool fHelp)
         if (ret.size() >= nCount) break;
     }
     // ret is now newest to oldest
-    
+
     // Make sure we return only last nCount items (sends-to-self might give us an extra):
     if (ret.size() > nCount)
     {
@@ -1385,6 +1460,83 @@ Value getanytransaction(const Array& params, bool fHelp)
     entry.push_back(Pair("txid", mtx.GetHash().GetHex()));
 
     return entry;
+}
+
+Value listmonitored(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "listmonitored\n"
+            "Returns list of urls that receive notification when new transactions/blocks are accepted.");
+
+    Array ret;
+    CRITICAL_BLOCK(cs_mapMonitored)
+    {
+
+        BOOST_FOREACH (const string& url, setMonitorBlocks)
+        {
+            Object item;
+            item.push_back(Pair("category", "block"));
+            item.push_back(Pair("url", url));
+            ret.push_back(item);
+        }
+
+        BOOST_FOREACH (const string& url, setMonitorTx)
+        {
+            Object item;
+            item.push_back(Pair("category", "tx"));
+            item.push_back(Pair("url", url));
+            ret.push_back(item);
+        }
+    }
+    return ret;
+}
+
+Value monitortx(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 3)
+        throw runtime_error(
+            "monitortx <url> [monitor=true]\n"
+            "POST transaction information to <url> as transactions are sent/received.\n"
+            "[monitor] true will start monitoring, false will stop.");
+    string url = params[0].get_str();
+    bool fMonitor = true;
+    if (params.size() > 1)
+        fMonitor = params[1].get_bool();
+
+    CRITICAL_BLOCK(cs_mapMonitored)
+    {
+        if (!fMonitor)
+            setMonitorTx.erase(url);
+        else
+            setMonitorTx.insert(url);
+        WriteSetting("monitor_tx", setMonitorTx);
+    }
+
+    return Value::null;
+}
+
+Value monitorblocks(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 3)
+        throw runtime_error(
+            "monitorblocks <url> [monitor=true]\n"
+            "POST block information to <url> as blocks are added to the block chain.\n"
+            "[monitor] true will start monitoring, false will stop.");
+        string url = params[0].get_str();
+    bool fMonitor = true;
+    if (params.size() > 1)
+        fMonitor = params[1].get_bool();
+
+    CRITICAL_BLOCK(cs_mapMonitored)
+    {
+        if (!fMonitor)
+            setMonitorBlocks.erase(url);
+        else
+            setMonitorBlocks.insert(url);
+        WriteSetting("monitor_block", setMonitorBlocks);
+    }
+    return Value::null;
 }
 
 
@@ -1872,6 +2024,9 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getmemorypool",          &getmemorypool),
     make_pair("listsinceblock",        &listsinceblock),
     make_pair("getanytransaction",      &getanytransaction),
+    make_pair("monitortx",             &monitortx),
+    make_pair("monitorblocks",         &monitorblocks),
+    make_pair("listmonitored",         &listmonitored),
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 
@@ -1898,6 +2053,10 @@ string pAllowInSafeMode[] =
     "validateaddress",
     "getwork",
     "getmemorypool",
+    "getanytransaction",
+    "monitortx",
+    "monitorblocks",
+    "listmonitored",
 };
 set<string> setAllowInSafeMode(pAllowInSafeMode, pAllowInSafeMode + sizeof(pAllowInSafeMode)/sizeof(pAllowInSafeMode[0]));
 
@@ -1920,6 +2079,23 @@ string HTTPPost(const string& strMsg, const map<string,string>& mapRequestHeader
       << "Content-Type: application/json\r\n"
       << "Content-Length: " << strMsg.size() << "\r\n"
       << "Connection: close\r\n"
+      << "Accept: application/json\r\n";
+    BOOST_FOREACH(const PAIRTYPE(string, string)& item, mapRequestHeaders)
+        s << item.first << ": " << item.second << "\r\n";
+    s << "\r\n" << strMsg;
+
+    return s.str();
+}
+
+string HTTPPost(const string& host, const string& path, const string& strMsg,
+                const map<string,string>& mapRequestHeaders)
+{
+    ostringstream s;
+    s << "POST " << path << " HTTP/1.1\r\n"
+      << "User-Agent: bitcoin-json-rpc/" << FormatFullVersion() << "\r\n"
+      << "Host: " << host << "\r\n"
+      << "Content-Type: application/json\r\n"
+      << "Content-Length: " << strMsg.size() << "\r\n"
       << "Accept: application/json\r\n";
     BOOST_FOREACH(const PAIRTYPE(string, string)& item, mapRequestHeaders)
         s << item.first << ": " << item.second << "\r\n";
@@ -2505,6 +2681,9 @@ int CommandLineRPC(int argc, char *argv[])
         }
         if (strMethod == "sendmany"                && n > 2) ConvertTo<boost::int64_t>(params[2]);
 
+        if (strMethod == "monitortx"              && n > 1) ConvertTo<bool>(params[1]);
+        if (strMethod == "monitorblocks"          && n > 1) ConvertTo<bool>(params[1]);
+
         // Execute
         Object reply = CallRPC(strMethod, params);
 
@@ -2547,7 +2726,125 @@ int CommandLineRPC(int argc, char *argv[])
     return nRet;
 }
 
+void ThreadHTTPPOST(void* parg)
+{
+    IMPLEMENT_RANDOMIZE_STACK(ThreadHTTPPOST(parg));
+    try
+    {
+        vnThreadsRunning[7]++;
+        ThreadHTTPPOST2(parg);
+        vnThreadsRunning[7]--;
+    }
+    catch (std::exception& e) {
+        vnThreadsRunning[7]--;
+        PrintException(&e, "ThreadHTTPPOST()");
+    } catch (...) {
+        vnThreadsRunning[7]--;
+        PrintException(NULL, "ThreadHTTPPOST()");
+    }
+    printf("ThreadHTTPPOST exiting\n");
+}
 
+void ThreadHTTPPOST2(void* parg)
+{
+    printf("ThreadHTTPPOST started\n");
+
+    loop
+    {
+        if (fShutdown)
+            return;
+
+        vector<boost::shared_ptr<CPOSTRequest> > work;
+        CRITICAL_BLOCK(cs_vPOSTQueue)
+        {
+            work = vPOSTQueue;
+            vPOSTQueue.clear();
+        }
+        BOOST_FOREACH (boost::shared_ptr<CPOSTRequest> r, work)
+            r->POST();
+
+        if (vPOSTQueue.empty())
+            Sleep(100); // 100ms (1/10 second)
+    }
+}
+
+
+void TransactionToJSON(const CTransaction& tx, Array& ret)
+{
+    Object entry;
+    entry.push_back(Pair("txid", tx.GetHash().GetHex()));
+    entry.push_back(Pair("confirmations", 0));
+    Array outpoints;
+    BOOST_FOREACH(const CTxOut& outpoint, tx.vout)
+    {
+        Object outp;
+        outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().substr(0,30).c_str()));
+        outp.push_back(Pair("value", strprintf("%"PRI64d".%08"PRI64d, outpoint.nValue / COIN, outpoint.nValue % COIN)));
+        outpoints.push_back(outp);
+    }
+    entry.push_back(Pair("outpoints", outpoints));
+    ret.push_back(entry);
+}
+
+void blockToJSON(const CBlock& block, const CBlockIndex* blockindex, Array& ret)
+{
+    Object entry;
+    entry.push_back(Pair("hash", block.GetHash().GetHex()));
+    entry.push_back(Pair("blockcount", blockindex->nHeight));
+    entry.push_back(Pair("version", block.nVersion));
+    entry.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
+    entry.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
+    entry.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
+    entry.push_back(Pair("difficulty", GetDifficulty(blockindex)));
+    Array txhashes;
+    BOOST_FOREACH (const CTransaction&tx, block.vtx)
+    txhashes.push_back(tx.GetHash().GetHex());
+    entry.push_back(Pair("tx", txhashes));
+
+    if (blockindex->pprev)
+        entry.push_back(Pair("hashprevious", blockindex->pprev->GetBlockHash().GetHex()));
+    if (blockindex->pnext)
+        entry.push_back(Pair("hashnext", blockindex->pnext->GetBlockHash().GetHex()));
+
+    ret.push_back(entry);
+}
+
+void monitorTx(const CTransaction& tx)
+{
+    Array params; // JSON-RPC requests are always "params" : [ ... ]
+    // ListTransactions(wtx, "*", 0, true, params);
+    TransactionToJSON(tx, params);
+
+    string postBody = JSONRPCRequest("monitortx", params, Value());
+    printf("monitortx Postbody: %s", postBody.c_str());
+    CRITICAL_BLOCK(cs_mapMonitored)
+    CRITICAL_BLOCK(cs_vPOSTQueue)
+    {
+        BOOST_FOREACH (const string& url, setMonitorTx)
+        {
+            boost::shared_ptr<CPOSTRequest> postRequest(new CPOSTRequest(url, postBody));
+            vPOSTQueue.push_back(postRequest);
+        }
+    }
+}
+
+void monitorBlock(const CBlock& block, const CBlockIndex* pblockindex)
+{
+    Array params; // JSON-RPC requests are always "params" : [ ... ]
+    blockToJSON(block, pblockindex, params);
+
+    string postBody = JSONRPCRequest("monitorblock", params, Value());
+
+    CRITICAL_BLOCK(cs_mapMonitored)
+    CRITICAL_BLOCK(cs_vPOSTQueue)
+    {
+        BOOST_FOREACH (const string& url, setMonitorBlocks)
+        {
+            boost::shared_ptr<CPOSTRequest> postRequest(new CPOSTRequest(url, postBody));
+            vPOSTQueue.push_back(postRequest);
+        }
+    }
+}
 
 
 #ifdef TEST

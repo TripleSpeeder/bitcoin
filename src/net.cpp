@@ -1823,7 +1823,7 @@ bool StopNode()
     fShutdown = true;
     nTransactionsUpdated++;
     int64 nStart = GetTime();
-    while (vnThreadsRunning[0] > 0 || vnThreadsRunning[2] > 0 || vnThreadsRunning[3] > 0 || vnThreadsRunning[4] > 0
+    while (vnThreadsRunning[0] > 0 || vnThreadsRunning[2] > 0 || vnThreadsRunning[3] > 0 || vnThreadsRunning[4] > 0 || vnThreadsRunning[7] > 0
 #ifdef USE_UPNP
         || vnThreadsRunning[5] > 0
 #endif
@@ -1840,6 +1840,7 @@ bool StopNode()
     if (vnThreadsRunning[4] > 0) printf("ThreadRPCServer still running\n");
     if (fHaveUPnP && vnThreadsRunning[5] > 0) printf("ThreadMapPort still running\n");
     if (vnThreadsRunning[6] > 0) printf("ThreadDNSAddressSeed still running\n");
+    if (vnThreadsRunning[7] > 0) printf("ThreadHTTPPost still running\n");
     while (vnThreadsRunning[2] > 0 || vnThreadsRunning[4] > 0)
         Sleep(20);
     Sleep(50);

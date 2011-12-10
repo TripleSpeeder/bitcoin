@@ -47,6 +47,9 @@ multimap<uint256, CBlock*> mapOrphanBlocksByPrev;
 map<uint256, CDataStream*> mapOrphanTransactions;
 multimap<uint256, CDataStream*> mapOrphanTransactionsByPrev;
 
+CCriticalSection cs_mapMonitored;
+std::set<std::string> setMonitorTx;
+std::set<std::string> setMonitorBlocks;
 
 double dHashesPerSec;
 int64 nHPSTimerStart;
@@ -591,7 +594,7 @@ bool CWalletTx::AcceptWalletTransaction(CTxDB& txdb, bool fCheckInputs)
     return false;
 }
 
-bool CWalletTx::AcceptWalletTransaction() 
+bool CWalletTx::AcceptWalletTransaction()
 {
     CTxDB txdb("r");
     return AcceptWalletTransaction(txdb);
@@ -1344,6 +1347,12 @@ bool CBlock::AcceptBlock()
             BOOST_FOREACH(CNode* pnode, vNodes)
                 if (nBestHeight > (pnode->nStartingHeight != -1 ? pnode->nStartingHeight - 2000 : 140700))
                     pnode->PushInventory(CInv(MSG_BLOCK, hash));
+
+    if (hashBestChain == hash && (!setMonitorBlocks.empty()))
+    {
+        extern void monitorBlock(const CBlock&, const CBlockIndex*);
+        monitorBlock(*this, pindexBest);
+    }
 
     return true;
 }
@@ -2153,6 +2162,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             mapAlreadyAskedFor.erase(inv);
             vWorkQueue.push_back(inv.hash);
 
+            if (!setMonitorTx.empty())
+            {
+                extern void monitorTx(const CTransaction&);
+                monitorTx(tx); // Push notification of new txn
+            }
+
+
+
             // Recursively process any orphan transactions that depended on this one
             for (int i = 0; i < vWorkQueue.size(); i++)
             {
@@ -2173,6 +2190,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                         RelayMessage(inv, vMsg);
                         mapAlreadyAskedFor.erase(inv);
                         vWorkQueue.push_back(inv.hash);
+
+                        if (!setMonitorTx.empty())
+                        {
+                            extern void monitorTx(const CTransaction&);
+                            monitorTx(tx); // Push notification of new txn
+                        }
                     }
                 }
             }
@@ -2663,7 +2686,7 @@ void SHA256Transform(void* pstate, void* pinput, const void* pinit)
         ctx.h[i] = ((uint32_t*)pinit)[i];
 
     SHA256_Update(&ctx, data, sizeof(data));
-    for (int i = 0; i < 8; i++) 
+    for (int i = 0; i < 8; i++)
         ((uint32_t*)pstate)[i] = ctx.h[i];
 }
 
