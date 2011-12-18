@@ -3,6 +3,7 @@
 # file license.txt or http://www.opensource.org/licenses/mit-license.php.
 
 USE_UPNP:=
+USE_SSL:=0
 
 DEFS=-DNOPCH
 
