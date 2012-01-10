@@ -2778,7 +2778,9 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
     BOOST_FOREACH(const CTxOut& outpoint, tx.vout)
     {
         Object outp;
-        outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().substr(0,30).c_str()));
+        // outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().substr(0,30).c_str()));
+        outp.push_back(Pair("bitcoinaddress", outpoint.scriptPubKey.GetBitcoinAddress().ToString().c_str()));
+        outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().c_str()));
         outp.push_back(Pair("value", strprintf("%"PRI64d".%08"PRI64d, outpoint.nValue / COIN, outpoint.nValue % COIN)));
         outpoints.push_back(outp);
     }
