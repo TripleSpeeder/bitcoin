@@ -1458,6 +1458,7 @@ Value getanytransaction(const Array& params, bool fHelp)
     Object entry;
     entry.push_back(Pair("confirmations", mtx.GetDepthInMainChain()));
     entry.push_back(Pair("txid", mtx.GetHash().GetHex()));
+    entry.push_back(Pair("orphaned", int(!mtx.IsInMainChain())));
 
     return entry;
 }
@@ -2781,7 +2782,7 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
         // outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().substr(0,30).c_str()));
         outp.push_back(Pair("bitcoinaddress", outpoint.scriptPubKey.GetBitcoinAddress().ToString().c_str()));
         outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().c_str()));
-        outp.push_back(Pair("value", strprintf("%"PRI64d".%08"PRI64d, outpoint.nValue / COIN, outpoint.nValue % COIN)));
+        outp.push_back(Pair("value", strprintf("%"PRI64d, outpoint.nValue)));
         outpoints.push_back(outp);
     }
     entry.push_back(Pair("outpoints", outpoints));
