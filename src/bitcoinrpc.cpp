@@ -42,6 +42,8 @@ static std::string strRPCUserColonPass;
 
 static int64 nWalletUnlockTime;
 static CCriticalSection cs_nWalletUnlockTime;
+static map<uint256, CTransaction> mapTransactions;
+extern CCriticalSection cs_mapTransactions;
 
 string HTTPPost(const string& host, const string& path, const string& strMsg,
                 const map<string,string>& mapRequestHeaders);
@@ -1437,6 +1439,8 @@ Value gettransaction(const Array& params, bool fHelp)
     return entry;
 }
 
+void TransactionToJSON(const CTransaction& tx, Array& ret);
+
 Value getanytransaction(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
@@ -1454,12 +1458,18 @@ Value getanytransaction(const Array& params, bool fHelp)
         throw JSONRPCError(-5, "Invalid or not-yet-in-blockchain transaction id");
     if (!mtx.SetMerkleBranch(NULL))
         throw JSONRPCError(-5, "Could not obtain transaction information");
-
+/*
     Object entry;
     entry.push_back(Pair("confirmations", mtx.GetDepthInMainChain()));
     entry.push_back(Pair("txid", mtx.GetHash().GetHex()));
     entry.push_back(Pair("orphaned", int(!mtx.IsInMainChain())));
-
+    return entry;
+*/
+    Object entry;
+    Array tx;
+    TransactionToJSON(mtx, tx);
+    entry.push_back(Pair("transaction", tx));
+    entry.push_back(Pair("confirmations", mtx.GetDepthInMainChain()));
     return entry;
 }
 
@@ -2776,16 +2786,64 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
     entry.push_back(Pair("txid", tx.GetHash().GetHex()));
     entry.push_back(Pair("confirmations", 0));
     Array outpoints;
+    Array inpoints;
     BOOST_FOREACH(const CTxOut& outpoint, tx.vout)
     {
         Object outp;
-        // outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().substr(0,30).c_str()));
         outp.push_back(Pair("bitcoinaddress", outpoint.scriptPubKey.GetBitcoinAddress().ToString().c_str()));
         outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().c_str()));
         outp.push_back(Pair("value", strprintf("%"PRI64d, outpoint.nValue)));
         outpoints.push_back(outp);
     }
+    if (!tx.IsCoinBase())
+    {
+        BOOST_FOREACH(const CTxIn& inpoint, tx.vin)
+        {
+            const COutPoint& outpoint(inpoint.prevout);
+            printf("Prev Outpoint Hash: %s, sequence %d\n", outpoint.hash.ToString().c_str(), outpoint.n);
+
+            // Read txPrev
+            CTransaction txPrev;
+            bool bFound = false;
+            // Get prev tx from single transactions in memory
+            CRITICAL_BLOCK(cs_mapTransactions)
+            {
+                if (mapTransactions.count(outpoint.hash))
+                {
+                    bFound = true;
+                    printf("Found prevTX in memory!\n");
+                    txPrev = mapTransactions[outpoint.hash];
+                }
+            }
+            if (!bFound) {
+                // Get prev tx from disk
+                bFound = txPrev.ReadFromDisk(outpoint);
+                if (bFound)
+                    printf("Found prevTX on disk!\n");
+            }
+
+            if (bFound) {
+                if (!txPrev.IsCoinBase()) {
+                    printf("Getting txOut...\n");
+                    CTxOut& txOut = txPrev.vout[outpoint.n];
+
+                    Object inp;
+                    inp.push_back(Pair("bitcoinaddress", txOut.scriptPubKey.GetBitcoinAddress().ToString().c_str()));
+                    inp.push_back(Pair("pubkey", txOut.scriptPubKey.ToString().c_str()));
+                    inp.push_back(Pair("value", strprintf("%"PRI64d, txOut.nValue)));
+                    inpoints.push_back(inp);
+                }
+                else {
+                    printf("Prev Transaction is coinbase. Skipping input...\n");
+                }
+            }
+            else {
+                printf("Could not find previous transaction %s on disk or in memory\n", outpoint.hash.ToString().c_str());
+            }
+        }
+    }
     entry.push_back(Pair("outpoints", outpoints));
+    entry.push_back(Pair("inpoints", inpoints));
     ret.push_back(entry);
 }
 
@@ -2815,7 +2873,6 @@ void blockToJSON(const CBlock& block, const CBlockIndex* blockindex, Array& ret)
 void monitorTx(const CTransaction& tx)
 {
     Array params; // JSON-RPC requests are always "params" : [ ... ]
-    // ListTransactions(wtx, "*", 0, true, params);
     TransactionToJSON(tx, params);
 
     string postBody = JSONRPCRequest("monitortx", params, Value());
