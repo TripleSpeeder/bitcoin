@@ -2824,7 +2824,7 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
 
             if (bFound) {
                 if (!txPrev.IsCoinBase()) {
-                    printf("Getting txOut...\n");
+                    printf("Getting txOut, index %d...\n", outpoint.n);
                     CTxOut& txOut = txPrev.vout[outpoint.n];
 
                     Object inp;
