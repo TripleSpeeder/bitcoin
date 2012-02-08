@@ -22,7 +22,7 @@ set<CWallet*> setpwalletRegistered;
 
 CCriticalSection cs_main;
 
-static map<uint256, CTransaction> mapTransactions;
+map<uint256, CTransaction> mapTransactions;
 CCriticalSection cs_mapTransactions;
 unsigned int nTransactionsUpdated = 0;
 map<COutPoint, CInPoint> mapNextTx;

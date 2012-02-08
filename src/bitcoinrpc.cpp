@@ -39,11 +39,11 @@ typedef Value(*rpcfn_type)(const Array& params, bool fHelp);
 extern map<string, rpcfn_type> mapCallTable;
 
 static std::string strRPCUserColonPass;
-
+extern map<uint256, CTransaction> mapTransactions;
 static int64 nWalletUnlockTime;
 static CCriticalSection cs_nWalletUnlockTime;
-static map<uint256, CTransaction> mapTransactions;
 extern CCriticalSection cs_mapTransactions;
+extern map<COutPoint, CInPoint> mapNextTx;
 
 string HTTPPost(const string& host, const string& path, const string& strMsg,
                 const map<string,string>& mapRequestHeaders);
@@ -2799,33 +2799,36 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
     {
         BOOST_FOREACH(const CTxIn& inpoint, tx.vin)
         {
-            const COutPoint& outpoint(inpoint.prevout);
-            printf("Prev Outpoint Hash: %s, sequence %d\n", outpoint.hash.ToString().c_str(), outpoint.n);
+            COutPoint prevout = inpoint.prevout;
+            printf("Prev Outpoint Hash: %s, sequence %d\n", prevout.hash.ToString().c_str(), prevout.n);
+            printf("MapTransactions len: %d\n", mapTransactions.size());
 
             // Read txPrev
             CTransaction txPrev;
             bool bFound = false;
-            // Get prev tx from single transactions in memory
+            // Get prev tx from memory
             CRITICAL_BLOCK(cs_mapTransactions)
             {
-                if (mapTransactions.count(outpoint.hash))
+                if (mapTransactions.count(prevout.hash))
                 {
                     bFound = true;
-                    printf("Found prevTX in memory!\n");
-                    txPrev = mapTransactions[outpoint.hash];
+                    printf("Found txPrev in mapTransactions!\n");
+                    txPrev = mapTransactions[prevout.hash];
                 }
             }
             if (!bFound) {
                 // Get prev tx from disk
-                bFound = txPrev.ReadFromDisk(outpoint);
+                bFound = txPrev.ReadFromDisk(prevout);
                 if (bFound)
-                    printf("Found prevTX on disk!\n");
+                {
+                    printf("Found txPrev on disk!\n");
+                }
             }
 
             if (bFound) {
                 if (!txPrev.IsCoinBase()) {
-                    printf("Getting txOut, index %d...\n", outpoint.n);
-                    CTxOut& txOut = txPrev.vout[outpoint.n];
+                    printf("Getting txOut, index %d...\n", prevout.n);
+                    CTxOut& txOut = txPrev.vout[prevout.n];
 
                     Object inp;
                     inp.push_back(Pair("bitcoinaddress", txOut.scriptPubKey.GetBitcoinAddress().ToString().c_str()));
@@ -2838,7 +2841,7 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
                 }
             }
             else {
-                printf("Could not find previous transaction %s on disk or in memory\n", outpoint.hash.ToString().c_str());
+                printf("Could not find previous transaction %s on disk or in memory\n", prevout.hash.ToString().c_str());
             }
         }
     }
