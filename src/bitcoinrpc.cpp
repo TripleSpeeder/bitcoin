@@ -2806,38 +2806,39 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
             // Read txPrev
             CTransaction txPrev;
             bool bFound = false;
-            // Get prev tx from memory
+
             CRITICAL_BLOCK(cs_mapTransactions)
             {
+                // Get prev tx from memory
                 if (mapTransactions.count(prevout.hash))
                 {
                     bFound = true;
                     printf("Found txPrev in mapTransactions!\n");
                     txPrev = mapTransactions[prevout.hash];
                 }
-            }
-            if (!bFound) {
-                // Get prev tx from disk
-                bFound = txPrev.ReadFromDisk(prevout);
-                if (bFound)
-                {
-                    printf("Found txPrev on disk!\n");
+                if (!bFound) {
+                    // Get prev tx from disk
+                    bFound = txPrev.ReadFromDisk(prevout);
+                    if (bFound)
+                    {
+                        printf("Found txPrev on disk!\n");
+                    }
                 }
-            }
 
-            if (bFound) {
-                if (!txPrev.IsCoinBase()) {
-                    printf("Getting txOut, index %d...\n", prevout.n);
-                    CTxOut& txOut = txPrev.vout[prevout.n];
+                if (bFound) {
+                    if (!txPrev.IsCoinBase()) {
+                        printf("Getting txOut, index %d...\n", prevout.n);
+                        CTxOut& txOut = txPrev.vout[prevout.n];
 
-                    Object inp;
-                    inp.push_back(Pair("bitcoinaddress", txOut.scriptPubKey.GetBitcoinAddress().ToString().c_str()));
-                    inp.push_back(Pair("pubkey", txOut.scriptPubKey.ToString().c_str()));
-                    inp.push_back(Pair("value", strprintf("%"PRI64d, txOut.nValue)));
-                    inpoints.push_back(inp);
-                }
-                else {
-                    printf("Prev Transaction is coinbase. Skipping input...\n");
+                        Object inp;
+                        inp.push_back(Pair("bitcoinaddress", txOut.scriptPubKey.GetBitcoinAddress().ToString().c_str()));
+                        inp.push_back(Pair("pubkey", txOut.scriptPubKey.ToString().c_str()));
+                        inp.push_back(Pair("value", strprintf("%"PRI64d, txOut.nValue)));
+                        inpoints.push_back(inp);
+                    }
+                    else {
+                        printf("Prev Transaction is coinbase. Skipping input...\n");
+                    }
                 }
             }
             else {
