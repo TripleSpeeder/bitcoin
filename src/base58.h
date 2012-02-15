@@ -77,6 +77,11 @@ inline bool DecodeBase58(const char* psz, std::vector<unsigned char>& vchRet)
     CBigNum bn58 = 58;
     CBigNum bn = 0;
     CBigNum bnChar;
+
+    // quick hack for P2SH compatibility...
+    if (!psz)
+        return false;
+
     while (isspace(*psz))
         psz++;
 
