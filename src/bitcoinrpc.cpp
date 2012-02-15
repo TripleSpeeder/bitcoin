@@ -2790,8 +2790,21 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
     BOOST_FOREACH(const CTxOut& outpoint, tx.vout)
     {
         Object outp;
-        outp.push_back(Pair("bitcoinaddress", outpoint.scriptPubKey.GetBitcoinAddress().ToString().c_str()));
+        printf("T2JSON: pubkey %s\n", outpoint.scriptPubKey.ToString().c_str());
         outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().c_str()));
+        printf("T2JSON: Getting addr...\n");
+        CBitcoinAddress addr = outpoint.scriptPubKey.GetBitcoinAddress();
+        printf("T2JSON: Got addr...\n");
+        if (addr.IsValid()) {
+            printf("T2JSON: Valid Address found.\n");
+            printf("T2JSON: address %s\n", addr.ToString().c_str());
+            outp.push_back(Pair("bitcoinaddress", addr.ToString().c_str()));
+        }
+        else {
+            printf("P2SH transaction found, could not determine bitcoinaddress");
+            outp.push_back(Pair("bitcoinaddress", "none(P2SH)"));
+        }
+        printf("T2JSON: value %"PRI64d"\n", outpoint.nValue);
         outp.push_back(Pair("value", strprintf("%"PRI64d, outpoint.nValue)));
         outpoints.push_back(outp);
     }
