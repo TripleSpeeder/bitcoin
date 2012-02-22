@@ -220,29 +220,6 @@ string AccountFromValue(const Value& value)
     return strAccount;
 }
 
-Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
-{
-    Object result;
-    result.push_back(Pair("hash", block.GetHash().GetHex()));
-    result.push_back(Pair("blockcount", blockindex->nHeight));
-    result.push_back(Pair("version", block.nVersion));
-    result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
-    result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
-    result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
-    result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
-    Array txhashes;
-    BOOST_FOREACH (const CTransaction&tx, block.vtx)
-        txhashes.push_back(tx.GetHash().GetHex());
-    result.push_back(Pair("tx", txhashes));
-
-    if (blockindex->pprev)
-        result.push_back(Pair("hashprevious", blockindex->pprev->GetBlockHash().GetHex()));
-    if (blockindex->pnext)
-        result.push_back(Pair("hashnext", blockindex->pnext->GetBlockHash().GetHex()));
-    return result;
-}
-
-
 
 ///
 /// Note: This interface may still be subject to change.
@@ -2159,6 +2136,8 @@ Value getblockhash(const Array& params, bool fHelp)
     return pblockindex->phashBlock->GetHex();
 }
 
+Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex);
+
 Value getblock(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
@@ -3098,28 +3077,28 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
     ret.push_back(entry);
 }
 
-void blockToJSON(const CBlock& block, const CBlockIndex* blockindex, Array& ret)
+Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
 {
-    Object entry;
-    entry.push_back(Pair("hash", block.GetHash().GetHex()));
-    entry.push_back(Pair("blockcount", blockindex->nHeight));
-    entry.push_back(Pair("version", block.nVersion));
-    entry.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
-    entry.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
-    entry.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
-    entry.push_back(Pair("difficulty", GetDifficulty(blockindex)));
-    Array txhashes;
+    Object result;
+    result.push_back(Pair("hash", block.GetHash().GetHex()));
+    result.push_back(Pair("blockcount", blockindex->nHeight));
+    result.push_back(Pair("version", block.nVersion));
+    result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
+    result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
+    result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
+    result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
+    Array txs;
     BOOST_FOREACH (const CTransaction&tx, block.vtx)
-    txhashes.push_back(tx.GetHash().GetHex());
-    entry.push_back(Pair("tx", txhashes));
+        TransactionToJSON(tx, txs);
+    result.push_back(Pair("tx", txs));
 
     if (blockindex->pprev)
-        entry.push_back(Pair("hashprevious", blockindex->pprev->GetBlockHash().GetHex()));
+        result.push_back(Pair("hashprevious", blockindex->pprev->GetBlockHash().GetHex()));
     if (blockindex->pnext)
-        entry.push_back(Pair("hashnext", blockindex->pnext->GetBlockHash().GetHex()));
-
-    ret.push_back(entry);
+        result.push_back(Pair("hashnext", blockindex->pnext->GetBlockHash().GetHex()));
+    return result;
 }
+
 
 void monitorTx(const CTransaction& tx)
 {
@@ -3142,7 +3121,7 @@ void monitorTx(const CTransaction& tx)
 void monitorBlock(const CBlock& block, const CBlockIndex* pblockindex)
 {
     Array params; // JSON-RPC requests are always "params" : [ ... ]
-    blockToJSON(block, pblockindex, params);
+    params.push_back(blockToJSON(block, pblockindex));
 
     string postBody = JSONRPCRequest("monitorblock", params, Value());
 
