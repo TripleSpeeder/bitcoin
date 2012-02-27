@@ -229,7 +229,9 @@ bool AppInit2(int argc, char* argv[])
             "  -rpcconnect=<ip> \t  "   + _("Send commands to node running on <ip> (default: 127.0.0.1)") + "\n" +
             "  -blocknotify=<cmd> "     + _("Execute command when the best block changes (%s in cmd is replaced by block hash)") + "\n" +
             "  -keypool=<n>     \t  "   + _("Set key pool size to <n> (default: 100)") + "\n" +
-            "  -rescan          \t  "   + _("Rescan the block chain for missing wallet transactions") + "\n";
+            "  -rescan          \t  "   + _("Rescan the block chain for missing wallet transactions") + "\n" +
+            "  -monitortx=<url> \t  "   + _("Set an url which gets notified about incoming transactions") + "\n" +
+            "  -monitorblocks=<url> \t  "   + _("Set an url which gets notified about new blocks") + "\n";
 
 #ifdef USE_SSL
         strUsage += string() +
@@ -542,6 +544,24 @@ bool AppInit2(int argc, char* argv[])
         }
         if (nTransactionFee > 0.25 * COIN)
             wxMessageBox(_("Warning: -paytxfee is set very high.  This is the transaction fee you will pay if you send a transaction."), "Bitcoin", wxOK | wxICON_EXCLAMATION);
+    }
+
+    if (mapArgs.count("-monitortx"))
+    {
+        BOOST_FOREACH(string strUrl, mapMultiArgs["-monitortx"])
+        {
+            setMonitorTx.insert(strUrl);
+            printf("Transaction monitoring enabled for %s\n", strUrl.c_str());
+        }
+    }
+
+    if (mapArgs.count("-monitorblocks"))
+    {
+        BOOST_FOREACH(string strUrl, mapMultiArgs["-monitorblocks"])
+        {
+            setMonitorBlocks.insert(strUrl);
+            printf("Block monitoring enabled for %s\n", strUrl.c_str());
+        }
     }
 
     //
