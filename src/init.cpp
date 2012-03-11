@@ -21,6 +21,7 @@ Q_IMPORT_PLUGIN(qcncodecs)
 Q_IMPORT_PLUGIN(qjpcodecs)
 Q_IMPORT_PLUGIN(qtwcodecs)
 Q_IMPORT_PLUGIN(qkrcodecs)
+Q_IMPORT_PLUGIN(qtaccessiblewidgets)
 #endif
 
 using namespace std;
@@ -149,27 +150,15 @@ bool AppInit2(int argc, char* argv[])
     //
     // Parameters
     //
-    // If Qt is used, parameters are parsed in qt/bitcoin.cpp's main()
+    // If Qt is used, parameters/bitcoin.conf are parsed in qt/bitcoin.cpp's main()
 #if !defined(QT_GUI)
     ParseParameters(argc, argv);
-#endif
-
-    if (mapArgs.count("-datadir"))
+    if (!ReadConfigFile(mapArgs, mapMultiArgs))
     {
-        if (filesystem::is_directory(filesystem::system_complete(mapArgs["-datadir"])))
-        {
-            filesystem::path pathDataDir = filesystem::system_complete(mapArgs["-datadir"]);
-            strlcpy(pszSetDataDir, pathDataDir.string().c_str(), sizeof(pszSetDataDir));
-        }
-        else
-        {
-            fprintf(stderr, "Error: Specified directory does not exist\n");
-            Shutdown(NULL);
-        }
+        fprintf(stderr, "Error: Specified directory does not exist\n");
+        Shutdown(NULL);
     }
-
-
-    ReadConfigFile(mapArgs, mapMultiArgs); // Must be done after processing datadir
+#endif
 
     if (mapArgs.count("-?") || mapArgs.count("--help"))
     {
@@ -186,6 +175,7 @@ bool AppInit2(int argc, char* argv[])
             "  -gen             \t\t  " + _("Generate coins") + "\n" +
             "  -gen=0           \t\t  " + _("Don't generate coins") + "\n" +
             "  -min             \t\t  " + _("Start minimized") + "\n" +
+            "  -splash          \t\t  " + _("Show splash screen on startup (default: 1)") + "\n" +
             "  -datadir=<dir>   \t\t  " + _("Specify data directory") + "\n" +
             "  -timeout=<n>     \t  "   + _("Specify connection timeout (in milliseconds)") + "\n" +
             "  -proxy=<ip:port> \t  "   + _("Connect through socks4 proxy") + "\n" +
@@ -196,6 +186,9 @@ bool AppInit2(int argc, char* argv[])
             "  -connect=<ip>    \t\t  " + _("Connect only to the specified node") + "\n" +
             "  -irc             \t  "   + _("Find peers using internet relay chat (default: 0)") + "\n" +
             "  -listen          \t  "   + _("Accept connections from outside (default: 1)") + "\n" +
+#ifdef QT_GUI
+            "  -lang=<lang>     \t\t  " + _("Set language, for example \"de_DE\" (default: system locale)") + "\n" +
+#endif
             "  -dnsseed         \t  "   + _("Find peers using DNS lookup (default: 1)") + "\n" +
             "  -banscore=<n>    \t  "   + _("Threshold for disconnecting misbehaving peers (default: 100)") + "\n" +
             "  -bantime=<n>     \t  "   + _("Number of seconds to keep misbehaving peers from reconnecting (default: 86400)") + "\n" +
@@ -209,10 +202,10 @@ bool AppInit2(int argc, char* argv[])
 #endif
 #endif
             "  -paytxfee=<amt>  \t  "   + _("Fee per KB to add to transactions you send") + "\n" +
-#ifdef GUI
+#ifdef QT_GUI
             "  -server          \t\t  " + _("Accept command line and JSON-RPC commands") + "\n" +
 #endif
-#ifndef WIN32
+#if !defined(WIN32) && !defined(QT_GUI)
             "  -daemon          \t\t  " + _("Run in the background as a daemon and accept commands") + "\n" +
 #endif
             "  -testnet         \t\t  " + _("Use the test network") + "\n" +
@@ -247,14 +240,24 @@ bool AppInit2(int argc, char* argv[])
 
         // Remove tabs
         strUsage.erase(std::remove(strUsage.begin(), strUsage.end(), '\t'), strUsage.end());
+#if defined(QT_GUI) && defined(WIN32)
+        // On windows, show a message box, as there is no stderr
+        wxMessageBox(strUsage, "Usage");
+#else
         fprintf(stderr, "%s", strUsage.c_str());
+#endif
         return false;
     }
 
     fTestNet = GetBoolArg("-testnet");
+    if (fTestNet)
+    {
+        SoftSetBoolArg("-irc", true);
+    }
+
     fDebug = GetBoolArg("-debug");
 
-#ifndef WIN32
+#if !defined(WIN32) && !defined(QT_GUI)
     fDaemon = GetBoolArg("-daemon");
 #else
     fDaemon = false;
@@ -285,7 +288,7 @@ bool AppInit2(int argc, char* argv[])
     }
 #endif
 
-#ifndef WIN32
+#if !defined(WIN32) && !defined(QT_GUI)
     if (fDaemon)
     {
         // Daemonize
@@ -460,8 +463,6 @@ bool AppInit2(int argc, char* argv[])
         return false;
     }
 
-    fGenerateBitcoins = GetBoolArg("-gen");
-
     if (mapArgs.count("-proxy"))
     {
         fUseProxy = true;
@@ -494,7 +495,7 @@ bool AppInit2(int argc, char* argv[])
         if (fTestNet)
             SoftSetArg("-paytoscripthashtime", "1329264000"); // Feb 15
         else
-            SoftSetArg("-paytoscripthashtime", "1330578000"); // Mar 1
+            SoftSetArg("-paytoscripthashtime", "1333238400"); // April 1 2012
 
         // Put "/P2SH/" in the coinbase so everybody can tell when
         // a majority of miners support it
@@ -506,13 +507,6 @@ bool AppInit2(int argc, char* argv[])
         const char* pszP2SH = "NOP2SH";
         COINBASE_FLAGS << std::vector<unsigned char>(pszP2SH, pszP2SH+strlen(pszP2SH));
     }
-
-    // Command-line args override in-wallet settings:
-#if USE_UPNP
-    fUseUPnP = GetBoolArg("-upnp", true);
-#else
-    fUseUPnP = GetBoolArg("-upnp", false);
-#endif
 
     if (!fNoListen)
     {

@@ -114,7 +114,7 @@ public:
         return fCompressedPubKey;
     }
 
-    void MakeNewKey(bool fCompressed = true)
+    void MakeNewKey(bool fCompressed)
     {
         if (!EC_KEY_generate_key(pkey))
             throw key_error("CKey::MakeNewKey() : EC_KEY_generate_key failed");
@@ -141,10 +141,13 @@ public:
         if (vchSecret.size() != 32)
             throw key_error("CKey::SetSecret() : secret must be 32 bytes");
         BIGNUM *bn = BN_bin2bn(&vchSecret[0],32,BN_new());
-        if (bn == NULL) 
+        if (bn == NULL)
             throw key_error("CKey::SetSecret() : BN_bin2bn failed");
         if (!EC_KEY_regenerate_key(pkey,bn))
+        {
+            BN_clear_free(bn);
             throw key_error("CKey::SetSecret() : EC_KEY_regenerate_key failed");
+        }
         BN_clear_free(bn);
         fSet = true;
         if (fCompressed || fCompressedPubKey)

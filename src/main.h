@@ -33,6 +33,7 @@ extern const std::string CLIENT_NAME;
 static const unsigned int MAX_BLOCK_SIZE = 1000000;
 static const unsigned int MAX_BLOCK_SIZE_GEN = MAX_BLOCK_SIZE/2;
 static const int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
+static const int MAX_ORPHAN_TRANSACTIONS = MAX_BLOCK_SIZE/100;
 static const int64 COIN = 100000000;
 static const int64 CENT = 1000000;
 static const int64 MIN_TX_FEE = 50000;
@@ -81,13 +82,7 @@ extern std::set<std::string> setMonitorTx; // set of urls listening for new tran
 extern std::set<std::string> setMonitorBlocks; // set of urls listening for new blocks
 
 // Settings
-extern int fGenerateBitcoins;
 extern int64 nTransactionFee;
-extern int fLimitProcessors;
-extern int nLimitProcessors;
-extern int fMinimizeToTray;
-extern int fMinimizeOnClose;
-extern int fUseUPnP;
 
 
 
@@ -130,20 +125,6 @@ std::string GetWarnings(std::string strFor);
 
 
 bool GetWalletFile(CWallet* pwallet, std::string &strWalletFileOut);
-
-template<typename T>
-bool WriteSetting(const std::string& strKey, const T& value)
-{
-    bool fOk = false;
-    BOOST_FOREACH(CWallet* pwallet, setpwalletRegistered)
-    {
-        std::string strWalletFile;
-        if (!GetWalletFile(pwallet, strWalletFile))
-            continue;
-        fOk |= CWalletDB(strWalletFile).WriteSetting(strKey, value);
-    }
-    return fOk;
-}
 
 
 class CDiskTxPos
@@ -917,6 +898,7 @@ public:
         return (int64)nTime;
     }
 
+    void UpdateTime(const CBlockIndex* pindexPrev);
 
 
     uint256 BuildMerkleTree() const

@@ -27,18 +27,10 @@ QSplashScreen *splashref;
 
 int MyMessageBox(const std::string& message, const std::string& caption, int style, wxWindow* parent, int x, int y)
 {
-    // Message from main thread
-    if(guiref)
-    {
-        guiref->error(QString::fromStdString(caption),
-                      QString::fromStdString(message));
-    }
-    else
-    {
-        QMessageBox::critical(0, QString::fromStdString(caption),
-            QString::fromStdString(message),
-            QMessageBox::Ok, QMessageBox::Ok);
-    }
+    // Message from AppInit2(), always in main thread before main window is constructed
+    QMessageBox::critical(0, QString::fromStdString(caption),
+        QString::fromStdString(message),
+        QMessageBox::Ok, QMessageBox::Ok);
     return 4;
 }
 
@@ -131,6 +123,7 @@ std::string _(const char* psz)
     return QCoreApplication::translate("bitcoin-core", psz).toStdString();
 }
 
+#ifndef BITCOIN_QT_TEST
 int main(int argc, char *argv[])
 {
     // Do this early as we don't want to bother initializing if we are just calling IPC
@@ -159,13 +152,35 @@ int main(int argc, char *argv[])
     Q_INIT_RESOURCE(bitcoin);
     QApplication app(argc, argv);
 
+    // Command-line options take precedence:
     ParseParameters(argc, argv);
 
-    // Load language files for system locale:
+    // ... then bitcoin.conf:
+    if (!ReadConfigFile(mapArgs, mapMultiArgs))
+    {
+        fprintf(stderr, "Error: Specified directory does not exist\n");
+        return 1;
+    }
+
+    // Application identification (must be set before OptionsModel is initialized,
+    // as it is used to locate QSettings)
+    app.setOrganizationName("Bitcoin");
+    app.setOrganizationDomain("bitcoin.org");
+    if(GetBoolArg("-testnet")) // Separate UI settings for testnet
+        app.setApplicationName("Bitcoin-Qt-testnet");
+    else
+        app.setApplicationName("Bitcoin-Qt");
+
+    // ... then GUI settings:
+    OptionsModel optionsModel;
+
+    // Get desired locale ("en_US") from command line or system locale
+    QString lang_territory = QString::fromStdString(GetArg("-lang", QLocale::system().name().toStdString()));
+    // Load language files for configured locale:
     // - First load the translator for the base language, without territory
     // - Then load the more specific locale translator
-    QString lang_territory = QLocale::system().name(); // "en_US"
     QString lang = lang_territory;
+
     lang.truncate(lang_territory.lastIndexOf('_')); // "en"
     QTranslator qtTranslatorBase, qtTranslator, translatorBase, translator;
 
@@ -185,12 +200,13 @@ int main(int argc, char *argv[])
     if (!translator.isEmpty())
         app.installTranslator(&translator);
 
-    app.setApplicationName(QApplication::translate("main", "Bitcoin-Qt"));
-
     QSplashScreen splash(QPixmap(":/images/splash"), 0);
-    splash.show();
-    splash.setAutoFillBackground(true);
-    splashref = &splash;
+    if (GetBoolArg("-splash", true) && !GetBoolArg("-min"))
+    {
+        splash.show();
+        splash.setAutoFillBackground(true);
+        splashref = &splash;
+    }
 
     app.processEvents();
 
@@ -203,9 +219,13 @@ int main(int argc, char *argv[])
             {
                 // Put this in a block, so that BitcoinGUI is cleaned up properly before
                 // calling Shutdown() in case of exceptions.
+
+                optionsModel.Upgrade(); // Must be done after AppInit2
+
                 BitcoinGUI window;
-                splash.finish(&window);
-                OptionsModel optionsModel(pwalletMain);
+                if (splashref)
+                    splash.finish(&window);
+
                 ClientModel clientModel(&optionsModel);
                 WalletModel walletModel(pwalletMain, &optionsModel);
 
@@ -257,3 +277,4 @@ int main(int argc, char *argv[])
     }
     return 0;
 }
+#endif // BITCOIN_QT_TEST
