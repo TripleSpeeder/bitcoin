@@ -26,7 +26,7 @@ class CInv;
 class CRequestTracker;
 class CNode;
 
-static const int CLIENT_VERSION = 60000;
+static const int CLIENT_VERSION = 60005;
 static const bool VERSION_IS_BETA = true;
 extern const std::string CLIENT_NAME;
 
@@ -126,7 +126,7 @@ std::string GetWarnings(std::string strFor);
 
 bool GetWalletFile(CWallet* pwallet, std::string &strWalletFileOut);
 
-
+/** Position on disk for a particular transaction. */
 class CDiskTxPos
 {
 public:
@@ -178,7 +178,7 @@ public:
 
 
 
-
+/** An inpoint - a combination of a transaction and an index n into its vin */
 class CInPoint
 {
 public:
@@ -193,7 +193,7 @@ public:
 
 
 
-
+/** An outpoint - a combination of a transaction hash and an index n into its vout */
 class COutPoint
 {
 public:
@@ -235,11 +235,10 @@ public:
 
 
 
-//
-// An input of a transaction.  It contains the location of the previous
-// transaction's output that it claims and a signature that matches the
-// output's public key.
-//
+/** An input of a transaction.  It contains the location of the previous
+ * transaction's output that it claims and a signature that matches the
+ * output's public key.
+ */
 class CTxIn
 {
 public:
@@ -314,10 +313,9 @@ public:
 
 
 
-//
-// An output of a transaction.  It contains the public key that the next input
-// must be able to sign with to claim it.
-//
+/** An output of a transaction.  It contains the public key that the next input
+ * must be able to sign with to claim it.
+ */
 class CTxOut
 {
 public:
@@ -393,10 +391,9 @@ enum GetMinFee_mode
 
 typedef std::map<uint256, std::pair<CTxIndex, CTransaction> > MapPrevTx;
 
-//
-// The basic transaction that is broadcasted on the network and contained in
-// blocks.  A transaction can contain multiple inputs and outputs.
-//
+/** The basic transaction that is broadcasted on the network and contained in
+ * blocks.  A transaction can contain multiple inputs and outputs.
+ */
 class CTransaction
 {
 public:
@@ -703,9 +700,7 @@ public:
 
 
 
-//
-// A transaction with a merkle branch linking it to the block chain
-//
+/** A transaction with a merkle branch linking it to the block chain. */
 class CMerkleTx : public CTransaction
 {
 public:
@@ -757,11 +752,10 @@ public:
 
 
 
-//
-// A txdb record that contains the disk location of a transaction and the
-// locations of transactions that spend its outputs.  vSpent is really only
-// used as a flag, but having the location is very helpful for debugging.
-//
+/**  A txdb record that contains the disk location of a transaction and the
+ * locations of transactions that spend its outputs.  vSpent is really only
+ * used as a flag, but having the location is very helpful for debugging.
+ */
 class CTxIndex
 {
 public:
@@ -816,17 +810,16 @@ public:
 
 
 
-//
-// Nodes collect new transactions into a block, hash them into a hash tree,
-// and scan through nonce values to make the block's hash satisfy proof-of-work
-// requirements.  When they solve the proof-of-work, they broadcast the block
-// to everyone and the block is added to the block chain.  The first transaction
-// in the block is a special one that creates a new coin owned by the creator
-// of the block.
-//
-// Blocks are appended to blk0001.dat files on disk.  Their location on disk
-// is indexed by CBlockIndex objects in memory.
-//
+/** Nodes collect new transactions into a block, hash them into a hash tree,
+ * and scan through nonce values to make the block's hash satisfy proof-of-work
+ * requirements.  When they solve the proof-of-work, they broadcast the block
+ * to everyone and the block is added to the block chain.  The first transaction
+ * in the block is a special one that creates a new coin owned by the creator
+ * of the block.
+ *
+ * Blocks are appended to blk0001.dat files on disk.  Their location on disk
+ * is indexed by CBlockIndex objects in memory.
+ */
 class CBlock
 {
 public:
@@ -1034,6 +1027,9 @@ public:
     bool AddToBlockIndex(unsigned int nFile, unsigned int nBlockPos);
     bool CheckBlock() const;
     bool AcceptBlock();
+
+private:
+    bool SetBestChainInner(CTxDB& txdb, CBlockIndex *pindexNew);
 };
 
 
@@ -1041,14 +1037,13 @@ public:
 
 
 
-//
-// The block chain is a tree shaped structure starting with the
-// genesis block at the root, with each block potentially having multiple
-// candidates to be the next block.  pprev and pnext link a path through the
-// main/longest chain.  A blockindex may have multiple pprev pointing back
-// to it, but pnext will only point forward to the longest branch, or will
-// be null if the block is not part of the longest chain.
-//
+/** The block chain is a tree shaped structure starting with the
+ * genesis block at the root, with each block potentially having multiple
+ * candidates to be the next block.  pprev and pnext link a path through the
+ * main/longest chain.  A blockindex may have multiple pprev pointing back
+ * to it, but pnext will only point forward to the longest branch, or will
+ * be null if the block is not part of the longest chain.
+ */
 class CBlockIndex
 {
 public:
@@ -1205,9 +1200,7 @@ public:
 
 
 
-//
-// Used to marshal pointers into hashes for db storage.
-//
+/** Used to marshal pointers into hashes for db storage. */
 class CDiskBlockIndex : public CBlockIndex
 {
 public:
@@ -1282,11 +1275,10 @@ public:
 
 
 
-//
-// Describes a place in the block chain to another node such that if the
-// other node doesn't have the same branch, it can find a recent common trunk.
-// The further back it is, the further before the fork it may be.
-//
+/** Describes a place in the block chain to another node such that if the
+ * other node doesn't have the same branch, it can find a recent common trunk.
+ * The further back it is, the further before the fork it may be.
+ */
 class CBlockLocator
 {
 protected:
@@ -1418,13 +1410,12 @@ public:
 
 
 
-//
-// Alerts are for notifying old versions if they become too obsolete and
-// need to upgrade.  The message is displayed in the status bar.
-// Alert messages are broadcast as a vector of signed data.  Unserializing may
-// not read the entire buffer if the alert is for a newer version, but older
-// versions can still relay the original data.
-//
+/** Alerts are for notifying old versions if they become too obsolete and
+ * need to upgrade.  The message is displayed in the status bar.
+ * Alert messages are broadcast as a vector of signed data.  Unserializing may
+ * not read the entire buffer if the alert is for a newer version, but older
+ * versions can still relay the original data.
+ */
 class CUnsignedAlert
 {
 public:
@@ -1524,6 +1515,7 @@ public:
     }
 };
 
+/** An alert is a combination of a serialized CUnsignedAlert and a signature. */
 class CAlert : public CUnsignedAlert
 {
 public:
