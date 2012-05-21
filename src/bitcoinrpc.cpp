@@ -3036,7 +3036,7 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
         BOOST_FOREACH(const CTxIn& inpoint, tx.vin)
         {
             COutPoint prevout = inpoint.prevout;
-            printf("Prev Outpoint Hash: %s, sequence %d\n", prevout.hash.ToString().c_str(), prevout.n);
+            // printf("Prev Outpoint Hash: %s, sequence %d\n", prevout.hash.ToString().c_str(), prevout.n);
 
             // Read txPrev
             CTransaction txPrev;
@@ -3058,7 +3058,7 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
 
             if (bFound) {
                 if (!txPrev.IsCoinBase()) {
-                    printf("Getting txOut, index %d...\n", prevout.n);
+                    // printf("Getting txOut, index %d...\n", prevout.n);
                     CTxOut& txOut = txPrev.vout[prevout.n];
 
                     Object inp;
@@ -3081,7 +3081,7 @@ void TransactionToJSON(const CTransaction& tx, Array& ret)
                     inpoints.push_back(inp);
                 }
                 else {
-                    printf("Prev Transaction is coinbase. Skipping input...\n");
+                    // printf("Prev Transaction is coinbase. Skipping input...\n");
                 }
             }
             else {
