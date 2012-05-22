@@ -7,35 +7,29 @@
 
 #include "bignum.h"
 #include "net.h"
-#include "key.h"
 #include "script.h"
-#include "db.h"
+
+#ifdef WIN32
+#include <io.h> /* for _commit */
+#endif
 
 #include <list>
 
+class CWallet;
 class CBlock;
 class CBlockIndex;
-class CWalletTx;
-class CWallet;
 class CKeyItem;
 class CReserveKey;
-class CWalletDB;
 
 class CAddress;
 class CInv;
 class CRequestTracker;
 class CNode;
 
-static const int CLIENT_VERSION = 60006;
-static const bool VERSION_IS_BETA = true;
-extern const std::string CLIENT_NAME;
-
 static const unsigned int MAX_BLOCK_SIZE = 1000000;
 static const unsigned int MAX_BLOCK_SIZE_GEN = MAX_BLOCK_SIZE/2;
-static const int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
-static const int MAX_ORPHAN_TRANSACTIONS = MAX_BLOCK_SIZE/100;
-static const int64 COIN = 100000000;
-static const int64 CENT = 1000000;
+static const unsigned int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
+static const unsigned int MAX_ORPHAN_TRANSACTIONS = MAX_BLOCK_SIZE/100;
 static const int64 MIN_TX_FEE = 50000;
 static const int64 MIN_RELAY_TX_FEE = 10000;
 static const int64 MAX_MONEY = 21000000 * COIN;
@@ -66,7 +60,6 @@ extern CBigNum bnBestChainWork;
 extern CBigNum bnBestInvalidWork;
 extern uint256 hashBestChain;
 extern CBlockIndex* pindexBest;
-extern uint64 nPooledTx;
 extern unsigned int nTransactionsUpdated;
 extern uint64 nLastBlockTx;
 extern uint64 nLastBlockSize;
@@ -165,7 +158,7 @@ public:
     std::string ToString() const
     {
         if (IsNull())
-            return strprintf("null");
+            return "null";
         else
             return strprintf("(nFile=%d, nBlockPos=%d, nTxPos=%d)", nFile, nBlockPos, nTxPos);
     }
@@ -292,7 +285,7 @@ public:
     std::string ToString() const
     {
         std::string str;
-        str += strprintf("CTxIn(");
+        str += "CTxIn(";
         str += prevout.ToString();
         if (prevout.IsNull())
             str += strprintf(", coinbase %s", HexStr(scriptSig).c_str());
@@ -448,7 +441,7 @@ public:
             nBlockHeight = nBestHeight;
         if (nBlockTime == 0)
             nBlockTime = GetAdjustedTime();
-        if ((int64)nLockTime < (nLockTime < LOCKTIME_THRESHOLD ? (int64)nBlockHeight : nBlockTime))
+        if ((int64)nLockTime < ((int64)nLockTime < LOCKTIME_THRESHOLD ? (int64)nBlockHeight : nBlockTime))
             return true;
         BOOST_FOREACH(const CTxIn& txin, vin)
             if (!txin.IsFinal())
@@ -460,13 +453,13 @@ public:
     {
         if (vin.size() != old.vin.size())
             return false;
-        for (int i = 0; i < vin.size(); i++)
+        for (unsigned int i = 0; i < vin.size(); i++)
             if (vin[i].prevout != old.vin[i].prevout)
                 return false;
 
         bool fNewer = false;
         unsigned int nLowest = std::numeric_limits<unsigned int>::max();
-        for (int i = 0; i < vin.size(); i++)
+        for (unsigned int i = 0; i < vin.size(); i++)
         {
             if (vin[i].nSequence != old.vin[i].nSequence)
             {
@@ -506,7 +499,7 @@ public:
         @return number of sigops this transaction's outputs will produce when spent
         @see CTransaction::FetchInputs
     */
-    int GetLegacySigOpCount() const;
+    unsigned int GetLegacySigOpCount() const;
 
     /** Count ECDSA signature operations in pay-to-script-hash inputs.
 
@@ -514,7 +507,7 @@ public:
         @return maximum number of sigops required to validate this transaction's inputs
         @see CTransaction::FetchInputs
      */
-    int GetP2SHSigOpCount(const MapPrevTx& mapInputs) const;
+    unsigned int GetP2SHSigOpCount(const MapPrevTx& mapInputs) const;
 
     /** Amount of bitcoins spent by this transaction.
         @return sum of all outputs (note: does not include fees)
@@ -553,7 +546,7 @@ public:
         // Base fee is either MIN_TX_FEE or MIN_RELAY_TX_FEE
         int64 nBaseFee = (mode == GMF_RELAY) ? MIN_RELAY_TX_FEE : MIN_TX_FEE;
 
-        unsigned int nBytes = ::GetSerializeSize(*this, SER_NETWORK);
+        unsigned int nBytes = ::GetSerializeSize(*this, SER_NETWORK, PROTOCOL_VERSION);
         unsigned int nNewBlockSize = nBlockSize + nBytes;
         int64 nMinFee = (1 + (int64)nBytes / 1000) * nBaseFee;
 
@@ -576,9 +569,11 @@ public:
 
         // To limit dust spam, require MIN_TX_FEE/MIN_RELAY_TX_FEE if any output is less than 0.01
         if (nMinFee < nBaseFee)
+        {
             BOOST_FOREACH(const CTxOut& txout, vout)
                 if (txout.nValue < CENT)
                     nMinFee = nBaseFee;
+        }
 
         // Raise the price as the block approaches full
         if (nBlockSize != 1 && nNewBlockSize >= MAX_BLOCK_SIZE_GEN/2)
@@ -596,7 +591,7 @@ public:
 
     bool ReadFromDisk(CDiskTxPos pos, FILE** pfileRet=NULL)
     {
-        CAutoFile filein = OpenBlockFile(pos.nFile, 0, pfileRet ? "rb+" : "rb");
+        CAutoFile filein = CAutoFile(OpenBlockFile(pos.nFile, 0, pfileRet ? "rb+" : "rb"), SER_DISK, CLIENT_VERSION);
         if (!filein)
             return error("CTransaction::ReadFromDisk() : OpenBlockFile failed");
 
@@ -638,9 +633,9 @@ public:
             vin.size(),
             vout.size(),
             nLockTime);
-        for (int i = 0; i < vin.size(); i++)
+        for (unsigned int i = 0; i < vin.size(); i++)
             str += "    " + vin[i].ToString() + "\n";
-        for (int i = 0; i < vout.size(); i++)
+        for (unsigned int i = 0; i < vout.size(); i++)
             str += "    " + vout[i].ToString() + "\n";
         return str;
     }
@@ -687,13 +682,9 @@ public:
     bool ClientConnectInputs();
     bool CheckTransaction() const;
     bool AcceptToMemoryPool(CTxDB& txdb, bool fCheckInputs=true, bool* pfMissingInputs=NULL);
-    bool AcceptToMemoryPool(bool fCheckInputs=true, bool* pfMissingInputs=NULL);
 
 protected:
     const CTxOut& GetOutputFor(const CTxIn& input, const MapPrevTx& inputs) const;
-    bool AddToMemoryPoolUnchecked();
-public:
-    bool RemoveFromMemoryPool();
 };
 
 
@@ -709,7 +700,7 @@ public:
     int nIndex;
 
     // memory only
-    mutable char fMerkleVerified;
+    mutable bool fMerkleVerified;
 
 
     CMerkleTx()
@@ -948,7 +939,7 @@ public:
     bool WriteToDisk(unsigned int& nFileRet, unsigned int& nBlockPosRet)
     {
         // Open history file to append
-        CAutoFile fileout = AppendBlockFile(nFileRet);
+        CAutoFile fileout = CAutoFile(AppendBlockFile(nFileRet), SER_DISK, CLIENT_VERSION);
         if (!fileout)
             return error("CBlock::WriteToDisk() : AppendBlockFile failed");
 
@@ -957,9 +948,10 @@ public:
         fileout << FLATDATA(pchMessageStart) << nSize;
 
         // Write block
-        nBlockPosRet = ftell(fileout);
-        if (nBlockPosRet == -1)
+        long fileOutPos = ftell(fileout);
+        if (fileOutPos < 0)
             return error("CBlock::WriteToDisk() : ftell failed");
+        nBlockPosRet = fileOutPos;
         fileout << *this;
 
         // Flush stdio buffers and commit to disk before returning
@@ -981,7 +973,7 @@ public:
         SetNull();
 
         // Open history file to read
-        CAutoFile filein = OpenBlockFile(nFile, nBlockPos, "rb");
+        CAutoFile filein = CAutoFile(OpenBlockFile(nFile, nBlockPos, "rb"), SER_DISK, CLIENT_VERSION);
         if (!filein)
             return error("CBlock::ReadFromDisk() : OpenBlockFile failed");
         if (!fReadTransactions)
@@ -1008,13 +1000,13 @@ public:
             hashMerkleRoot.ToString().substr(0,10).c_str(),
             nTime, nBits, nNonce,
             vtx.size());
-        for (int i = 0; i < vtx.size(); i++)
+        for (unsigned int i = 0; i < vtx.size(); i++)
         {
             printf("  ");
             vtx[i].print();
         }
         printf("  vMerkleTree: ");
-        for (int i = 0; i < vMerkleTree.size(); i++)
+        for (unsigned int i = 0; i < vMerkleTree.size(); i++)
             printf("%s ", vMerkleTree[i].ToString().substr(0,10).c_str());
         printf("\n");
     }
@@ -1142,7 +1134,7 @@ public:
     bool EraseBlockFromDisk()
     {
         // Open history file
-        CAutoFile fileout = OpenBlockFile(nFile, nBlockPos, "rb+");
+        CAutoFile fileout = CAutoFile(OpenBlockFile(nFile, nBlockPos, "rb+"), SER_DISK, CLIENT_VERSION);
         if (!fileout)
             return false;
 
@@ -1602,12 +1594,43 @@ public:
             return error("CAlert::CheckSignature() : verify signature failed");
 
         // Now unserialize the data
-        CDataStream sMsg(vchMsg);
+        CDataStream sMsg(vchMsg, SER_NETWORK, PROTOCOL_VERSION);
         sMsg >> *(CUnsignedAlert*)this;
         return true;
     }
 
     bool ProcessAlert();
 };
+
+class CTxMemPool
+{
+public:
+    mutable CCriticalSection cs;
+    std::map<uint256, CTransaction> mapTx;
+    std::map<COutPoint, CInPoint> mapNextTx;
+
+    bool accept(CTxDB& txdb, CTransaction &tx,
+                bool fCheckInputs, bool* pfMissingInputs);
+    bool addUnchecked(CTransaction &tx);
+    bool remove(CTransaction &tx);
+
+    unsigned long size()
+    {
+        LOCK(cs);
+        return mapTx.size();
+    }
+
+    bool exists(uint256 hash)
+    {
+        return (mapTx.count(hash) != 0);
+    }
+
+    CTransaction& lookup(uint256 hash)
+    {
+        return mapTx[hash];
+    }
+};
+
+extern CTxMemPool mempool;
 
 #endif
