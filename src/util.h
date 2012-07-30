@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2012 The Bitcoin developers
 // Distributed under the MIT/X11 software license, see the accompanying
-// file license.txt or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #ifndef BITCOIN_UTIL_H
 #define BITCOIN_UTIL_H
 
@@ -23,7 +23,7 @@ typedef int pid_t; /* define for windows compatiblity */
 #include <boost/filesystem/path.hpp>
 #include <boost/interprocess/sync/interprocess_recursive_mutex.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
-#include <boost/interprocess/sync/interprocess_condition.hpp>
+#include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <boost/interprocess/sync/lock_options.hpp>
 #include <boost/date_time/gregorian/gregorian_types.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
@@ -168,6 +168,7 @@ bool SetStartOnSystemStartup(bool fAutoStart);
 void ShrinkDebugFile();
 int GetRandInt(int nMax);
 uint64 GetRand(uint64 nMax);
+uint256 GetRandHash();
 int64 GetTime();
 void SetMockTime(int64 nMockTimeIn);
 int64 GetAdjustedTime();
@@ -217,9 +218,11 @@ public:
             {
                 printf("LOCKCONTENTION: %s\n", pszName);
                 printf("Locker: %s:%d\n", pszFile, nLine);
-            }
 #endif
             lock.lock();
+#ifdef DEBUG_LOCKCONTENTION
+            }
+#endif
         }
     }
 
@@ -270,24 +273,10 @@ public:
 };
 
 typedef CMutexLock<CCriticalSection> CCriticalBlock;
-typedef CMutexLock<CWaitableCriticalSection> CWaitableCriticalBlock;
-typedef boost::interprocess::interprocess_condition CConditionVariable;
-
-/** Wait for a given condition inside a WAITABLE_CRITICAL_BLOCK */
-#define WAIT(name,condition) \
-   do { while(!(condition)) { (name).wait(waitablecriticalblock.GetLock()); } } while(0)
-
-/** Notify waiting threads that a condition may hold now */
-#define NOTIFY(name) \
-   do { (name).notify_one(); } while(0)
-
-#define NOTIFY_ALL(name) \
-   do { (name).notify_all(); } while(0)
 
 #define LOCK(cs) CCriticalBlock criticalblock(cs, #cs, __FILE__, __LINE__)
 #define LOCK2(cs1,cs2) CCriticalBlock criticalblock1(cs1, #cs1, __FILE__, __LINE__),criticalblock2(cs2, #cs2, __FILE__, __LINE__)
 #define TRY_LOCK(cs,name) CCriticalBlock name(cs, #cs, __FILE__, __LINE__, true)
-#define WAITABLE_LOCK(cs) CWaitableCriticalBlock waitablecriticalblock(cs, #cs, __FILE__, __LINE__)
 
 #define ENTER_CRITICAL_SECTION(cs) \
     { \
@@ -301,6 +290,47 @@ typedef boost::interprocess::interprocess_condition CConditionVariable;
         LeaveCritical(); \
     }
 
+#ifdef MAC_OSX
+// boost::interprocess::interprocess_semaphore seems to spinlock on OSX; prefer polling instead
+class CSemaphore
+{
+private:
+    CCriticalSection cs;
+    int val;
+
+public:
+    CSemaphore(int init) : val(init) {}
+
+    void wait() {
+        do {
+            {
+                LOCK(cs);
+                if (val>0) {
+                    val--;
+                    return;
+                }
+            }
+            Sleep(100);
+        } while(1);
+    }
+
+    bool try_wait() {
+        LOCK(cs);
+        if (val>0) {
+            val--;
+            return true;
+        }
+        return false;
+    }
+
+    void post() {
+        LOCK(cs);
+        val++;
+    }
+};
+#else
+typedef boost::interprocess::interprocess_semaphore CSemaphore;
+#endif
 
 inline std::string i64tostr(int64 n)
 {

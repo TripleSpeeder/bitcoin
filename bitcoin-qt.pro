@@ -1,8 +1,8 @@
 TEMPLATE = app
 TARGET =
-VERSION = 0.6.2
+VERSION = 0.6.3.0
 INCLUDEPATH += src src/json src/qt
-DEFINES += QT_GUI BOOST_THREAD_USE_LIB
+DEFINES += QT_GUI BOOST_THREAD_USE_LIB BOOST_SPIRIT_THREADSAFE
 CONFIG += no_include_pwd
 
 # for boost 1.37, add -mt to the boost libraries 
@@ -83,7 +83,7 @@ contains(BITCOIN_NEED_QT_PLUGINS, 1) {
 # regenerate src/build.h
 !windows || contains(USE_BUILD_INFO, 1) {
     genbuild.depends = FORCE
-    genbuild.commands = cd $$PWD; share/genbuild.sh $$OUT_PWD/build/build.h
+    genbuild.commands = cd $$PWD; /bin/sh share/genbuild.sh $$OUT_PWD/build/build.h
     genbuild.target = genbuildhook
     PRE_TARGETDEPS += genbuildhook
     QMAKE_EXTRA_TARGETS += genbuild

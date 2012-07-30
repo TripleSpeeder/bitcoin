@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2012 The Bitcoin developers
 // Distributed under the MIT/X11 software license, see the accompanying
-// file license.txt or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "db.h"
 #include "util.h"
@@ -96,6 +96,7 @@ CDB::CDB(const char *pszFile, const char* pszMode) : pdb(NULL)
             dbenv.set_lk_max_locks(10000);
             dbenv.set_lk_max_objects(10000);
             dbenv.set_errfile(fopen(pathErrorFile.string().c_str(), "a")); /// debug
+            dbenv.set_flags(DB_TXN_WRITE_NOSYNC, 1);
             dbenv.set_flags(DB_AUTO_COMMIT, 1);
             dbenv.log_set_config(DB_LOG_AUTO_REMOVE, 1);
             ret = dbenv.open(pathDataDir.string().c_str(),
@@ -410,9 +411,15 @@ bool CTxDB::ReadOwnerTxes(uint160 hash160, int nMinHeight, vector<CTransaction>&
         string strType;
         uint160 hashItem;
         CDiskTxPos pos;
-        ssKey >> strType >> hashItem >> pos;
         int nItemHeight;
-        ssValue >> nItemHeight;
+
+        try {
+            ssKey >> strType >> hashItem >> pos;
+            ssValue >> nItemHeight;
+        }
+        catch (std::exception &e) {
+            return error("%s() : deserialize error", __PRETTY_FUNCTION__);
+        }
 
         // Read transaction
         if (strType != "owner" || hashItem != hash160)
@@ -532,6 +539,8 @@ bool CTxDB::LoadBlockIndex()
             return false;
 
         // Unserialize
+
+        try {
         string strType;
         ssKey >> strType;
         if (strType == "blockindex" && !fRequestShutdown)
@@ -562,6 +571,10 @@ bool CTxDB::LoadBlockIndex()
         else
         {
             break; // if shutdown requested or finished loading block index
+        }
+        }    // try
+        catch (std::exception &e) {
+            return error("%s() : deserialize error", __PRETTY_FUNCTION__);
         }
     }
     pcursor->close();

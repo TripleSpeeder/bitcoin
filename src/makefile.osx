@@ -53,7 +53,7 @@ LIBS += \
 TESTDEFS += -DBOOST_TEST_DYN_LINK
 endif
 
-DEFS=-DMAC_OSX -DMSG_NOSIGNAL=0
+DEFS=-DMAC_OSX -DMSG_NOSIGNAL=0 -DBOOST_SPIRIT_THREADSAFE
 
 ifdef RELEASE
 # Compile for maximum compatibility and smallest size.
@@ -106,7 +106,7 @@ all: bitcoind
 -include obj-test/*.P
 
 obj/build.h: FORCE
-	../share/genbuild.sh obj/build.h
+	/bin/sh ../share/genbuild.sh obj/build.h
 version.cpp: obj/build.h
 DEFS += -DHAVE_BUILD_INFO
 
