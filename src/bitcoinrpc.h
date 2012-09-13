@@ -10,7 +10,9 @@
 #include <list>
 #include <map>
 
+class CTransaction;
 class CBlockIndex;
+class CBlock;
 
 #include "json/json_spirit_reader_template.h"
 #include "json/json_spirit_writer_template.h"
@@ -19,9 +21,14 @@ class CBlockIndex;
 #include "util.h"
 
 json_spirit::Object JSONRPCError(int code, const std::string& message);
+json_spirit::Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex);
+void TxToJSON(const CTransaction& tx, const uint256 hashBlock, json_spirit::Object& entry);
 
 void ThreadRPCServer(void* parg);
+void ThreadHTTPPOST(void* parg);
 int CommandLineRPC(int argc, char *argv[]);
+
+
 
 /** Convert parameter values for RPC call from strings to command-specific JSON objects. */
 json_spirit::Array RPCConvertValues(const std::string &strMethod, const std::vector<std::string> &strParams);
@@ -140,5 +147,8 @@ extern json_spirit::Value settxfee(const json_spirit::Array& params, bool fHelp)
 extern json_spirit::Value getrawmempool(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value getblockhash(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value getblock(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value monitortx(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value monitorblocks(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value listmonitored(const json_spirit::Array& params, bool fHelp);
 
 #endif

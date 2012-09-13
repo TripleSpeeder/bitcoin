@@ -79,6 +79,7 @@ inline bool DecodeBase58(const char* psz, std::vector<unsigned char>& vchRet)
     CBigNum bn58 = 58;
     CBigNum bn = 0;
     CBigNum bnChar;
+
     while (isspace(*psz))
         psz++;
 

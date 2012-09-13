@@ -1462,4 +1462,3 @@ Value validateaddress(const Array& params, bool fHelp)
     }
     return ret;
 }
-

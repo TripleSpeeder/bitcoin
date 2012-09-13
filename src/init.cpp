@@ -746,6 +746,24 @@ bool AppInit2()
     printf("Loaded %i addresses from peers.dat  %"PRI64d"ms\n",
            addrman.size(), GetTimeMillis() - nStart);
 
+    if (mapArgs.count("-monitortx"))
+    {
+        BOOST_FOREACH(string strUrl, mapMultiArgs["-monitortx"])
+        {
+            setMonitorTx.insert(strUrl);
+            printf("Transaction monitoring enabled for %s\n", strUrl.c_str());
+        }
+    }
+
+    if (mapArgs.count("-monitorblocks"))
+    {
+        BOOST_FOREACH(string strUrl, mapMultiArgs["-monitorblocks"])
+        {
+            setMonitorBlocks.insert(strUrl);
+            printf("Block monitoring enabled for %s\n", strUrl.c_str());
+        }
+    }
+
     // ********************************************************* Step 10: start node
 
     if (!CheckDiskSpace())
@@ -764,7 +782,10 @@ bool AppInit2()
         InitError(_("Error: could not start node"));
 
     if (fServer)
+    {
         NewThread(ThreadRPCServer, NULL);
+        NewThread(ThreadHTTPPOST, NULL);
+    }
 
     // ********************************************************* Step 11: finished
 

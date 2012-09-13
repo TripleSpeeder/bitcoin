@@ -11,6 +11,7 @@
 #include "bitcoinrpc.h"
 
 #undef printf
+#include <boost/xpressive/xpressive_dynamic.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/ip/v6_only.hpp>
 #include <boost/bind.hpp>
@@ -33,12 +34,17 @@ using namespace boost::asio;
 using namespace json_spirit;
 
 void ThreadRPCServer2(void* parg);
+void ThreadHTTPPOST2(void *parg);
 
 static std::string strRPCUserColonPass;
 
 const Object emptyobj;
 
 void ThreadRPCServer3(void* parg);
+
+// static vector<boost::shared_ptr<CPOSTRequest> > vPOSTQueue;
+static CCriticalSection cs_vPOSTQueue;
+
 
 Object JSONRPCError(int code, const string& message)
 {
@@ -188,7 +194,6 @@ Value stop(const Array& params, bool fHelp)
 // Call Table
 //
 
-
 static const CRPCCommand vRPCCommands[] =
 { //  name                      function                 safemd  unlocked
   //  ------------------------  -----------------------  ------  --------
@@ -247,6 +252,9 @@ static const CRPCCommand vRPCCommands[] =
     { "decoderawtransaction",   &decoderawtransaction,   false,  false },
     { "signrawtransaction",     &signrawtransaction,     false,  false },
     { "sendrawtransaction",     &sendrawtransaction,     false,  false },
+    { "monitortx",              &monitortx,              true,   false },
+    { "monitorblocks",          &monitorblocks,          true,   false },
+    { "listmonitored",          &listmonitored,          true,   false },
 };
 
 CRPCTable::CRPCTable()
@@ -285,6 +293,23 @@ string HTTPPost(const string& strMsg, const map<string,string>& mapRequestHeader
       << "Content-Type: application/json\r\n"
       << "Content-Length: " << strMsg.size() << "\r\n"
       << "Connection: close\r\n"
+      << "Accept: application/json\r\n";
+    BOOST_FOREACH(const PAIRTYPE(string, string)& item, mapRequestHeaders)
+        s << item.first << ": " << item.second << "\r\n";
+    s << "\r\n" << strMsg;
+
+    return s.str();
+}
+
+string HTTPPost(const string& host, const string& path, const string& strMsg,
+                const map<string,string>& mapRequestHeaders)
+{
+    ostringstream s;
+    s << "POST " << path << " HTTP/1.1\r\n"
+      << "User-Agent: bitcoin-json-rpc/" << FormatFullVersion() << "\r\n"
+      << "Host: " << host << "\r\n"
+      << "Content-Type: application/json\r\n"
+      << "Content-Length: " << strMsg.size() << "\r\n"
       << "Accept: application/json\r\n";
     BOOST_FOREACH(const PAIRTYPE(string, string)& item, mapRequestHeaders)
         s << item.first << ": " << item.second << "\r\n";
@@ -1160,6 +1185,8 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "createrawtransaction"   && n > 1) ConvertTo<Object>(params[1]);
     if (strMethod == "signrawtransaction"     && n > 1) ConvertTo<Array>(params[1], true);
     if (strMethod == "signrawtransaction"     && n > 2) ConvertTo<Array>(params[2], true);
+    if (strMethod == "monitortx"              && n > 1) ConvertTo<bool>(params[1]);
+    if (strMethod == "monitorblocks"          && n > 1) ConvertTo<bool>(params[1]);
 
     return params;
 }
@@ -1227,7 +1254,268 @@ int CommandLineRPC(int argc, char *argv[])
     }
     return nRet;
 }
+/*
+void TransactionToJSON(const CTransaction& tx, Array& ret)
+{
+    Object entry;
+    entry.push_back(Pair("txid", tx.GetHash().GetHex()));
+    entry.push_back(Pair("confirmations", 0));
+    Array outpoints;
+    Array inpoints;
+    BOOST_FOREACH(const CTxOut& outpoint, tx.vout)
+    {
+        Object outp;
+        outp.push_back(Pair("pubkey", outpoint.scriptPubKey.ToString().c_str()));
+        CBitcoinAddress addr;
+        if (ExtractAddress(outpoint.scriptPubKey,addr)){
+            if (addr.IsValid()) {
+                outp.push_back(Pair("bitcoinaddress", addr.ToString().c_str()));
+            }
+            else {
+                printf("Could not obtain valid BitcoinAddress!\n");
+                outp.push_back(Pair("bitcoinaddress", "none"));
+            }
+        }
+        else {
+            printf("Could not extract BitcoinAddress!\n");
+            outp.push_back(Pair("bitcoinaddress", "none"));
+        }
+        outp.push_back(Pair("value", strprintf("%"PRI64d, outpoint.nValue)));
+        outpoints.push_back(outp);
+    }
+    if (!tx.IsCoinBase())
+    {
+        BOOST_FOREACH(const CTxIn& inpoint, tx.vin)
+        {
+            COutPoint prevout = inpoint.prevout;
+            // printf("Prev Outpoint Hash: %s, sequence %d\n", prevout.hash.ToString().c_str(), prevout.n);
 
+            // Read txPrev
+            CTransaction txPrev;
+            bool bFound = false;
+
+            {
+                LOCK(cs_mapTransactions);
+                // Get prev tx from memory
+                if (mapTransactions.count(prevout.hash))
+                {
+                    bFound = true;
+                    txPrev = mapTransactions[prevout.hash];
+                }
+            }
+            if (!bFound) {
+                // Get prev tx from disk
+                bFound = txPrev.ReadFromDisk(prevout);
+            }
+
+            if (bFound) {
+                if (!txPrev.IsCoinBase()) {
+                    // printf("Getting txOut, index %d...\n", prevout.n);
+                    CTxOut& txOut = txPrev.vout[prevout.n];
+
+                    Object inp;
+                    CBitcoinAddress addr;
+                    if (ExtractAddress(txOut.scriptPubKey,addr)){
+                        if (addr.IsValid()) {
+                            inp.push_back(Pair("bitcoinaddress", addr.ToString().c_str()));
+                        }
+                        else {
+                            printf("Could not obtain valid BitcoinAddress!\n");
+                            inp.push_back(Pair("bitcoinaddress", "none"));
+                        }
+                    }
+                    else {
+                        printf("Could not extract BitcoinAddress!\n");
+                        inp.push_back(Pair("bitcoinaddress", "none"));
+                    }
+                    inp.push_back(Pair("pubkey", txOut.scriptPubKey.ToString().c_str()));
+                    inp.push_back(Pair("value", strprintf("%"PRI64d, txOut.nValue)));
+                    inpoints.push_back(inp);
+                }
+                else {
+                    // printf("Prev Transaction is coinbase. Skipping input...\n");
+                }
+            }
+            else {
+                printf("Could not find previous transaction %s on disk or in memory\n", prevout.hash.ToString().c_str());
+            }
+        }
+    }
+    entry.push_back(Pair("outpoints", outpoints));
+    entry.push_back(Pair("inpoints", inpoints));
+    ret.push_back(entry);
+}
+*/
+/*
+Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
+{
+    Object result;
+    result.push_back(Pair("hash", block.GetHash().GetHex()));
+    result.push_back(Pair("blockcount", blockindex->nHeight));
+    result.push_back(Pair("version", block.nVersion));
+    result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
+    result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
+    result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
+    result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
+    Array txs;
+    BOOST_FOREACH (const CTransaction&tx, block.vtx)
+        TransactionToJSON(tx, txs);
+    result.push_back(Pair("tx", txs));
+
+    if (blockindex->pprev)
+        result.push_back(Pair("hashprevious", blockindex->pprev->GetBlockHash().GetHex()));
+    if (blockindex->pnext)
+        result.push_back(Pair("hashnext", blockindex->pnext->GetBlockHash().GetHex()));
+    return result;
+}
+*/
+
+class CPOSTRequest
+{
+public:
+    CPOSTRequest(const string &_url, const string& _body) : url(_url), body(_body)
+    {
+    }
+
+    virtual bool POST()
+    {
+        using namespace boost::xpressive;
+        // This regex is wrong for IPv6 urls; see http://www.ietf.org/rfc/rfc2732.txt
+        //  (they're weird; e.g  "http://[::FFFF:129.144.52.38]:80/index.html" )
+        // I can live with non-raw-IPv6 urls for now...
+        static sregex url_regex = sregex::compile("^(http|https)://([^:/]+)(:[0-9]{1,5})?(.*)$");
+
+        boost::xpressive::smatch urlparts;
+        if (!regex_match(url, urlparts, url_regex))
+        {
+            printf("URL PARSING FAILED: %s\n", url.c_str());
+            return true;
+        }
+        string protocol = urlparts[1];
+        string host = urlparts[2];
+        string s_port = urlparts[3];  // Note: includes colon, e.g. ":8080"
+        bool fSSL = (protocol == "https" ? true : false);
+        int port = (fSSL ? 443 : 80);
+        if (s_port.size() > 1) { port = atoi(s_port.c_str()+1); }
+        string path = urlparts[4];
+        map<string, string> headers;
+
+#ifdef USE_SSL
+        io_service io_service;
+        ssl::context context(io_service, ssl::context::sslv23);
+        context.set_options(ssl::context::no_sslv2);
+        SSLStream sslStream(io_service, context);
+        SSLIOStreamDevice d(sslStream, fSSL);
+        boost::iostreams::stream<SSLIOStreamDevice> stream(d);
+        if (!d.connect(host, boost::lexical_cast<string>(port)))
+        {
+            printf("POST: Couldn't connect to %s:%d", host.c_str(), port);
+            return false;
+        }
+#else
+        if (fSSL)
+        {
+            printf("Cannot POST to SSL server, bitcoin compiled without full openssl libraries.");
+            return false;
+        }
+        ip::tcp::iostream stream(host, boost::lexical_cast<string>(port));
+#endif
+
+        stream << HTTPPost(host, path, body, headers) << std::flush;
+        map<string, string> mapResponseHeaders;
+        string strReply;
+        int status = ReadHTTP(stream, mapResponseHeaders, strReply);
+//        printf(" HTTP response %d: %s\n", status, strReply.c_str());
+
+        return (status < 300);
+    }
+
+protected:
+    string url;
+    string body;
+};
+
+static vector<boost::shared_ptr<CPOSTRequest> > vPOSTQueue;
+
+void monitorTx(const CTransaction& tx)
+{
+    Array params; // JSON-RPC requests are always "params" : [ ... ]
+    Object entry;
+    uint256 hashBlock = 0;
+    TxToJSON(tx, hashBlock, entry);
+    params.push_back(entry);
+
+    string postBody = JSONRPCRequest("monitortx", params, Value());
+    printf("monitortx Postbody: %s", postBody.c_str());
+    {
+        LOCK2(cs_mapMonitored, cs_vPOSTQueue);
+        BOOST_FOREACH (const string& url, setMonitorTx)
+        {
+            boost::shared_ptr<CPOSTRequest> postRequest(new CPOSTRequest(url, postBody));
+            vPOSTQueue.push_back(postRequest);
+        }
+    }
+}
+
+void monitorBlock(const CBlock& block, const CBlockIndex* pblockindex)
+{
+    Array params; // JSON-RPC requests are always "params" : [ ... ]
+    params.push_back(blockToJSON(block, pblockindex));
+
+    string postBody = JSONRPCRequest("monitorblock", params, Value());
+
+    {
+        LOCK2(cs_mapMonitored, cs_vPOSTQueue);
+        BOOST_FOREACH (const string& url, setMonitorBlocks)
+        {
+            boost::shared_ptr<CPOSTRequest> postRequest(new CPOSTRequest(url, postBody));
+            vPOSTQueue.push_back(postRequest);
+        }
+    }
+}
+
+
+void ThreadHTTPPOST(void* parg)
+{
+    IMPLEMENT_RANDOMIZE_STACK(ThreadHTTPPOST(parg));
+    try
+    {
+        vnThreadsRunning[THREAD_HTTPPOST]++;
+        ThreadHTTPPOST2(parg);
+        vnThreadsRunning[THREAD_HTTPPOST]--;
+    }
+    catch (std::exception& e) {
+        vnThreadsRunning[THREAD_HTTPPOST]--;
+        PrintException(&e, "ThreadHTTPPOST()");
+    } catch (...) {
+        vnThreadsRunning[THREAD_HTTPPOST]--;
+        PrintException(NULL, "ThreadHTTPPOST()");
+    }
+    printf("ThreadHTTPPOST exiting\n");
+}
+
+void ThreadHTTPPOST2(void* parg)
+{
+    printf("ThreadHTTPPOST started\n");
+
+    loop
+    {
+        if (fShutdown)
+            return;
+
+        vector<boost::shared_ptr<CPOSTRequest> > work;
+        {
+            LOCK(cs_vPOSTQueue);
+            work = vPOSTQueue;
+            vPOSTQueue.clear();
+        }
+        BOOST_FOREACH (boost::shared_ptr<CPOSTRequest> r, work)
+            r->POST();
+
+        if (vPOSTQueue.empty())
+            Sleep(100); // 100ms (1/10 second)
+    }
+}
 
 
 

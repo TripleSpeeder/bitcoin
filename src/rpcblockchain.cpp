@@ -6,6 +6,17 @@
 #include "main.h"
 #include "bitcoinrpc.h"
 
+#include <boost/xpressive/xpressive_dynamic.hpp>
+
+#include <boost/asio.hpp>
+#include <boost/asio/ip/v6_only.hpp>
+#include <boost/bind.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/foreach.hpp>
+#include <boost/iostreams/concepts.hpp>
+#include <boost/iostreams/stream.hpp>
+#include <boost/asio/ssl.hpp>
+
 using namespace json_spirit;
 using namespace std;
 
@@ -159,6 +170,121 @@ Value getblock(const Array& params, bool fHelp)
     return blockToJSON(block, pblockindex);
 }
 
+
+extern map<uint256, CTransaction> mapTransactions;
+extern CCriticalSection cs_mapTransactions;
+extern map<COutPoint, CInPoint> mapNextTx;
+
+//string HTTPPost(const string& host, const string& path, const string& strMsg,
+//                const map<string,string>& mapRequestHeaders);
+//extern int ReadHTTP(std::basic_istream<char>& stream, map<string, string>& mapHeadersRet, string& strMessageRet);
+// void ThreadHTTPPOST2(void* parg);
+
+
+/*
+void TransactionToJSON(const CTransaction& tx, Array& ret);
+
+Value getanytransaction(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "getanytransaction <txid>\n"
+            "Get information about <txid>. (Not restricted to wallet)");
+
+    uint256 hash;
+    hash.SetHex(params[0].get_str());
+
+    // construct COutPoint to satisfy ReadFromDisk method
+    COutPoint dummyOutp(hash, 0);
+    CMerkleTx mtx;
+    if (!mtx.ReadFromDisk(dummyOutp))
+        throw JSONRPCError(-5, "Invalid or not-yet-in-blockchain transaction id");
+    if (!mtx.SetMerkleBranch(NULL))
+        throw JSONRPCError(-5, "Could not obtain transaction information");
+    Object entry;
+    Array tx;
+    TransactionToJSON(mtx, tx);
+    entry.push_back(Pair("transaction", tx));
+    entry.push_back(Pair("confirmations", mtx.GetDepthInMainChain()));
+    return entry;
+}
+*/
+Value listmonitored(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "listmonitored\n"
+            "Returns list of urls that receive notification when new transactions/blocks are accepted.");
+
+    Array ret;
+    {
+        LOCK(cs_mapMonitored);
+
+        BOOST_FOREACH (const string& url, setMonitorBlocks)
+        {
+            Object item;
+            item.push_back(Pair("category", "block"));
+            item.push_back(Pair("url", url));
+            ret.push_back(item);
+        }
+
+        BOOST_FOREACH (const string& url, setMonitorTx)
+        {
+            Object item;
+            item.push_back(Pair("category", "tx"));
+            item.push_back(Pair("url", url));
+            ret.push_back(item);
+        }
+    }
+    return ret;
+}
+
+Value monitortx(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 3)
+        throw runtime_error(
+            "monitortx <url> [monitor=true]\n"
+            "POST transaction information to <url> as transactions are sent/received.\n"
+            "[monitor] true will start monitoring, false will stop.");
+    string url = params[0].get_str();
+    bool fMonitor = true;
+    if (params.size() > 1)
+        fMonitor = params[1].get_bool();
+
+    {
+        LOCK(cs_mapMonitored);
+        if (!fMonitor)
+            setMonitorTx.erase(url);
+        else
+            setMonitorTx.insert(url);
+        // WriteSetting("monitor_tx", setMonitorTx);
+    }
+
+    return Value::null;
+}
+
+Value monitorblocks(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 3)
+        throw runtime_error(
+            "monitorblocks <url> [monitor=true]\n"
+            "POST block information to <url> as blocks are added to the block chain.\n"
+            "[monitor] true will start monitoring, false will stop.");
+        string url = params[0].get_str();
+    bool fMonitor = true;
+    if (params.size() > 1)
+        fMonitor = params[1].get_bool();
+
+    {
+        LOCK(cs_mapMonitored);
+        if (!fMonitor)
+            setMonitorBlocks.erase(url);
+        else
+            setMonitorBlocks.insert(url);
+        // WriteSetting("monitor_block", setMonitorBlocks);
+    }
+    return Value::null;
+}
 
 
 

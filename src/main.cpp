@@ -25,6 +25,8 @@ set<CWallet*> setpwalletRegistered;
 
 CCriticalSection cs_main;
 
+map<uint256, CTransaction> mapTransactions;
+CCriticalSection cs_mapTransactions;
 CTxMemPool mempool;
 unsigned int nTransactionsUpdated = 0;
 
@@ -46,6 +48,10 @@ multimap<uint256, CBlock*> mapOrphanBlocksByPrev;
 
 map<uint256, CDataStream*> mapOrphanTransactions;
 map<uint256, map<uint256, CDataStream*> > mapOrphanTransactionsByPrev;
+
+CCriticalSection cs_mapMonitored;
+std::set<std::string> setMonitorTx;
+std::set<std::string> setMonitorBlocks;
 
 // Constant stuff for coinbase transactions we create:
 CScript COINBASE_FLAGS;
@@ -1874,6 +1880,12 @@ bool CBlock::AcceptBlock()
                 pnode->PushInventory(CInv(MSG_BLOCK, hash));
     }
 
+    if (hashBestChain == hash && (!setMonitorBlocks.empty()))
+    {
+        extern void monitorBlock(const CBlock&, const CBlockIndex*);
+        monitorBlock(*this, pindexBest);
+    }
+
     return true;
 }
 
@@ -2779,6 +2791,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             vWorkQueue.push_back(inv.hash);
             vEraseQueue.push_back(inv.hash);
 
+            if (!setMonitorTx.empty())
+            {
+                extern void monitorTx(const CTransaction&);
+                monitorTx(tx); // Push notification of new txn
+            }
+
             // Recursively process any orphan transactions that depended on this one
             for (unsigned int i = 0; i < vWorkQueue.size(); i++)
             {
@@ -2801,6 +2819,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                         mapAlreadyAskedFor.erase(inv);
                         vWorkQueue.push_back(inv.hash);
                         vEraseQueue.push_back(inv.hash);
+                        if (!setMonitorTx.empty())
+                        {
+                            extern void monitorTx(const CTransaction&);
+                            monitorTx(tx); // Push notification of new txn
+                        }
                     }
                     else if (!fMissingInputs2)
                     {
