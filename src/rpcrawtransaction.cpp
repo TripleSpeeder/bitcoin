@@ -58,43 +58,33 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
             in.push_back(Pair("coinbase", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
         else
         {
-/*
             in.push_back(Pair("txid", txin.prevout.hash.GetHex()));
             in.push_back(Pair("vout", (boost::int64_t)txin.prevout.n));
             Object o;
             o.push_back(Pair("asm", txin.scriptSig.ToString()));
             o.push_back(Pair("hex", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
             in.push_back(Pair("scriptSig", o));
-*/
-            // BEGIN TEST CODE
-            COutPoint prevout = txin.prevout;
-            printf("Prev Outpoint Hash: %s, sequence %d\n", prevout.hash.ToString().c_str(), prevout.n);
 
-            // Read txPrev
+            // BEGIN TripleSpeeder modification
+            // I need to also know the inputs of each transaction...
+            // Get previous transaction
+            COutPoint prevout = txin.prevout;
             CTransaction txPrev;
             uint256 hashBlock = 0;
-            if (!GetTransaction(prevout.hash, txPrev, hashBlock))
-                throw JSONRPCError(-5, "No information available about transaction");
-
-            /* Checking for Coinbase does not make sense? Even if the input of the previous TX was coinbase, it should
-             * still have outputs. And here I am only interested in the outputs (vout)... */
-            if ( 0 /*txPrev.IsCoinBase()*/)
+            if (GetTransaction(prevout.hash, txPrev, hashBlock))
             {
-                printf("Prev Transaction is coinbase. Skipping input...\n");
-            }
-            else {
-                printf("Getting txOut, index %d...\n", prevout.n);
                 const CTxOut& txout = txPrev.vout[prevout.n];
                 in.push_back(Pair("value", ValueFromAmount(txout.nValue)));
                 in.push_back(Pair("n", (boost::int64_t)prevout.n));
                 Object o;
                 ScriptPubKeyToJSON(txout.scriptPubKey, o);
                 in.push_back(Pair("scriptPubKey", o));
+            } else {
+                printf("Could not obtain previous tx %s\n", prevout.hash.ToString().c_str());
             }
-            // END TEST CODE
+            // END TripleSpeeder modification
         }
-
-        // in.push_back(Pair("sequence", (boost::int64_t)txin.nSequence));
+        in.push_back(Pair("sequence", (boost::int64_t)txin.nSequence));
         vin.push_back(in);
     }
     entry.push_back(Pair("vin", vin));

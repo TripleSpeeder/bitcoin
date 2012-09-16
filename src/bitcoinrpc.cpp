@@ -1446,7 +1446,7 @@ void monitorTx(const CTransaction& tx)
     params.push_back(entry);
 
     string postBody = JSONRPCRequest("monitortx", params, Value());
-    printf("monitortx Postbody: %s", postBody.c_str());
+    // printf("monitortx Postbody: %s", postBody.c_str());
     {
         LOCK2(cs_mapMonitored, cs_vPOSTQueue);
         BOOST_FOREACH (const string& url, setMonitorTx)
@@ -1463,7 +1463,6 @@ void monitorBlock(const CBlock& block, const CBlockIndex* pblockindex)
     params.push_back(blockToJSON(block, pblockindex));
 
     string postBody = JSONRPCRequest("monitorblock", params, Value());
-
     {
         LOCK2(cs_mapMonitored, cs_vPOSTQueue);
         BOOST_FOREACH (const string& url, setMonitorBlocks)

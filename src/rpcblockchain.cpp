@@ -175,40 +175,7 @@ extern map<uint256, CTransaction> mapTransactions;
 extern CCriticalSection cs_mapTransactions;
 extern map<COutPoint, CInPoint> mapNextTx;
 
-//string HTTPPost(const string& host, const string& path, const string& strMsg,
-//                const map<string,string>& mapRequestHeaders);
-//extern int ReadHTTP(std::basic_istream<char>& stream, map<string, string>& mapHeadersRet, string& strMessageRet);
-// void ThreadHTTPPOST2(void* parg);
 
-
-/*
-void TransactionToJSON(const CTransaction& tx, Array& ret);
-
-Value getanytransaction(const Array& params, bool fHelp)
-{
-    if (fHelp || params.size() != 1)
-        throw runtime_error(
-            "getanytransaction <txid>\n"
-            "Get information about <txid>. (Not restricted to wallet)");
-
-    uint256 hash;
-    hash.SetHex(params[0].get_str());
-
-    // construct COutPoint to satisfy ReadFromDisk method
-    COutPoint dummyOutp(hash, 0);
-    CMerkleTx mtx;
-    if (!mtx.ReadFromDisk(dummyOutp))
-        throw JSONRPCError(-5, "Invalid or not-yet-in-blockchain transaction id");
-    if (!mtx.SetMerkleBranch(NULL))
-        throw JSONRPCError(-5, "Could not obtain transaction information");
-    Object entry;
-    Array tx;
-    TransactionToJSON(mtx, tx);
-    entry.push_back(Pair("transaction", tx));
-    entry.push_back(Pair("confirmations", mtx.GetDepthInMainChain()));
-    return entry;
-}
-*/
 Value listmonitored(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
@@ -257,7 +224,6 @@ Value monitortx(const Array& params, bool fHelp)
             setMonitorTx.erase(url);
         else
             setMonitorTx.insert(url);
-        // WriteSetting("monitor_tx", setMonitorTx);
     }
 
     return Value::null;
@@ -281,7 +247,6 @@ Value monitorblocks(const Array& params, bool fHelp)
             setMonitorBlocks.erase(url);
         else
             setMonitorBlocks.insert(url);
-        // WriteSetting("monitor_block", setMonitorBlocks);
     }
     return Value::null;
 }
