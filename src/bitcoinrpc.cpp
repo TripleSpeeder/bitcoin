@@ -1439,20 +1439,24 @@ static vector<boost::shared_ptr<CPOSTRequest> > vPOSTQueue;
 
 void monitorTx(const CTransaction& tx)
 {
-    Array params; // JSON-RPC requests are always "params" : [ ... ]
-    Object entry;
-    uint256 hashBlock = 0;
-    TxToJSON(tx, hashBlock, entry);
-    params.push_back(entry);
-
-    string postBody = JSONRPCRequest("monitortx", params, Value());
-    // printf("monitortx Postbody: %s", postBody.c_str());
+    // only monitor for transactions to my wallet(s)
+    if (pwalletMain->IsMine(tx))
     {
-        LOCK2(cs_mapMonitored, cs_vPOSTQueue);
-        BOOST_FOREACH (const string& url, setMonitorTx)
+        Array params; // JSON-RPC requests are always "params" : [ ... ]
+        Object entry;
+        uint256 hashBlock = 0;
+        TxToJSON(tx, hashBlock, entry);
+        params.push_back(entry);
+
+        string postBody = JSONRPCRequest("monitortx", params, Value());
+        printf("monitortx Postbody: %s", postBody.c_str());
         {
-            boost::shared_ptr<CPOSTRequest> postRequest(new CPOSTRequest(url, postBody));
-            vPOSTQueue.push_back(postRequest);
+            LOCK2(cs_mapMonitored, cs_vPOSTQueue);
+            BOOST_FOREACH (const string& url, setMonitorTx)
+            {
+                boost::shared_ptr<CPOSTRequest> postRequest(new CPOSTRequest(url, postBody));
+                vPOSTQueue.push_back(postRequest);
+            }
         }
     }
 }

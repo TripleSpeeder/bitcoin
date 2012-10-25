@@ -66,7 +66,7 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
             in.push_back(Pair("scriptSig", o));
 
             // BEGIN TripleSpeeder modification
-            // I need to also know the inputs of each transaction...
+            // I need to also know the inputs of each transaction.
             // Get previous transaction
             COutPoint prevout = txin.prevout;
             CTransaction txPrev;

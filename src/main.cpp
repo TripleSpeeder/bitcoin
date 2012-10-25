@@ -2793,8 +2793,12 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
             if (!setMonitorTx.empty())
             {
-                extern void monitorTx(const CTransaction&);
-                monitorTx(tx); // Push notification of new txn
+                // only monitor for transactions to my wallet(s)
+                if (pwalletMain->IsMine(tx))
+                {
+                    extern void monitorTx(const CTransaction&);
+                    monitorTx(tx); // Push notification of new txn
+                }
             }
 
             // Recursively process any orphan transactions that depended on this one
