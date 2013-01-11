@@ -79,6 +79,22 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
                 Object o;
                 ScriptPubKeyToJSON(txout.scriptPubKey, o);
                 in.push_back(Pair("scriptPubKey", o));
+                if (hashBlock != 0) {
+                    // Get number of confirmations
+                    map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hashBlock);
+                    if (mi != mapBlockIndex.end() && (*mi).second)
+                    {
+                        CBlockIndex* pindex = (*mi).second;
+                        if (pindex->IsInMainChain()){
+                            in.push_back(Pair("confirmations", 1 + nBestHeight - pindex->nHeight));
+                        } else {
+                            in.push_back(Pair("confirmations", 0));
+                        }
+                    }
+                } else {
+                    // prev tx not yet in blockchain or unknown to client -> 0 confirmations
+                    in.push_back(Pair("confirmations", 0));
+                }
             } else {
                 printf("Could not obtain previous tx %s\n", prevout.hash.ToString().c_str());
             }
