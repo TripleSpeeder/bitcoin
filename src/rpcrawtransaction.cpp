@@ -80,7 +80,7 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
                 ScriptPubKeyToJSON(txout.scriptPubKey, o);
                 in.push_back(Pair("scriptPubKey", o));
                 if (hashBlock != 0) {
-                    // Get number of confirmations
+                    // Get number of confirmations of prev transaction
                     map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hashBlock);
                     if (mi != mapBlockIndex.end() && (*mi).second)
                     {
