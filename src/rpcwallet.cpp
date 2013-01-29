@@ -497,6 +497,16 @@ int64 GetAccountBalance(const string& strAccount, int nMinDepth)
 }
 
 
+Value getunconfirmedbalance(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 0)
+        throw runtime_error(
+            "getunconfirmedbalance\n"
+            "returns the server's total unconfirmed balance.\n");
+
+    return  ValueFromAmount(pwalletMain->GetUnconfirmedBalance());
+}
+
 Value getbalance(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 2)
