@@ -23,6 +23,7 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/filesystem/fstream.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/xpressive/xpressive_dynamic.hpp>
 #include <list>
 
 using namespace std;
@@ -40,6 +41,7 @@ static std::string strRPCUserColonPass;
 static asio::io_service* rpc_io_service = NULL;
 static ssl::context* rpc_ssl_context = NULL;
 static boost::thread_group* rpc_worker_group = NULL;
+
 
 static inline unsigned short GetDefaultRPCPort()
 {
@@ -310,6 +312,24 @@ string HTTPPost(const string& strMsg, const map<string,string>& mapRequestHeader
 
     return s.str();
 }
+
+string HTTPPost(const string& host, const string& path, const string& strMsg,
+                const map<string,string>& mapRequestHeaders)
+{
+    ostringstream s;
+    s << "POST " << path << " HTTP/1.1\r\n"
+      << "User-Agent: bitcoin-json-rpc/" << FormatFullVersion() << "\r\n"
+      << "Host: " << host << "\r\n"
+      << "Content-Type: application/json\r\n"
+      << "Content-Length: " << strMsg.size() << "\r\n"
+      << "Accept: application/json\r\n";
+    BOOST_FOREACH(const PAIRTYPE(string, string)& item, mapRequestHeaders)
+        s << item.first << ": " << item.second << "\r\n";
+    s << "\r\n" << strMsg;
+
+    return s.str();
+}
+
 
 string rfc1123Time()
 {

@@ -28,6 +28,8 @@ using namespace boost;
 CWallet* pwalletMain;
 CClientUIInterface uiInterface;
 
+extern bool fMonitorAllTx;
+
 #ifdef WIN32
 // Win32 LevelDB doesn't use filedescriptors, and the ones used for
 // accessing block files, don't count towards to fd_set size limit
@@ -1072,6 +1074,8 @@ bool AppInit2(boost::thread_group& threadGroup)
             printf("Transaction monitoring enabled for %s\n", strUrl.c_str());
         }
     }
+
+    fMonitorAllTx = GetBoolArg("-monitoralltx");
 
     if (mapArgs.count("-monitorblocks"))
     {

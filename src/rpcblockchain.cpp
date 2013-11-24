@@ -276,7 +276,6 @@ Value monitortx(const Array& params, bool fHelp)
             setMonitorTx.erase(url);
         else
             setMonitorTx.insert(url);
-        // WriteSetting("monitor_tx", setMonitorTx);
     }
 
     return Value::null;
@@ -300,7 +299,6 @@ Value monitorblocks(const Array& params, bool fHelp)
             setMonitorBlocks.erase(url);
         else
             setMonitorBlocks.insert(url);
-        //WriteSetting("monitor_block", setMonitorBlocks);
     }
     return Value::null;
 }
