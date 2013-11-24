@@ -94,6 +94,41 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
             o.push_back(Pair("asm", txin.scriptSig.ToString()));
             o.push_back(Pair("hex", HexStr(txin.scriptSig.begin(), txin.scriptSig.end())));
             in.push_back(Pair("scriptSig", o));
+
+            // BEGIN TripleSpeeder modification
+            // I need to also know the inputs of each transaction.
+            // Get previous transaction
+            COutPoint prevout = txin.prevout;
+            CTransaction txPrev;
+            uint256 hashBlock = 0;
+            if (GetTransaction(prevout.hash, txPrev, hashBlock))
+            {
+                const CTxOut& txout = txPrev.vout[prevout.n];
+                in.push_back(Pair("value", ValueFromAmount(txout.nValue)));
+                in.push_back(Pair("n", (boost::int64_t)prevout.n));
+                Object o;
+                ScriptPubKeyToJSON(txout.scriptPubKey, o);
+                in.push_back(Pair("scriptPubKey", o));
+                if (hashBlock != 0) {
+                    // Get number of confirmations
+                    map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(hashBlock);
+                    if (mi != mapBlockIndex.end() && (*mi).second)
+                    {
+                        CBlockIndex* pindex = (*mi).second;
+                        if (pindex->IsInMainChain()){
+                            in.push_back(Pair("confirmations", 1 + nBestHeight - pindex->nHeight));
+                        } else {
+                            in.push_back(Pair("confirmations", 0));
+                        }
+                    }
+                } else {
+                    // prev tx not yet in blockchain or unknown to client -> 0 confirmations
+                    in.push_back(Pair("confirmations", 0));
+                }
+            } else {
+                printf("Could not obtain previous tx %s\n", prevout.hash.ToString().c_str());
+            }
+            // END TripleSpeeder modification
         }
         in.push_back(Pair("sequence", (boost::int64_t)txin.nSequence));
         vin.push_back(in);

@@ -72,7 +72,9 @@ int64 nHPSTimerStart = 0;
 // Settings
 int64 nTransactionFee = 0;
 
-
+extern bool fMonitorAllTx;
+void monitorTx(const CTransaction& tx);
+void monitorBlock(const CBlock&, const CBlockIndex*);
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -2225,6 +2227,11 @@ bool CBlock::AcceptBlock(CValidationState &state, CDiskBlockPos *dbp)
                 pnode->PushInventory(CInv(MSG_BLOCK, hash));
     }
 
+    if (hashBestChain == hash && (!setMonitorBlocks.empty()))
+    {
+        monitorBlock(*this, pindexBest);
+    }
+
     return true;
 }
 
@@ -3006,13 +3013,6 @@ string GetWarnings(string strFor)
     return "error";
 }
 
-
-
-
-
-
-
-
 //////////////////////////////////////////////////////////////////////////////
 //
 // Messages
@@ -3517,6 +3517,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             vWorkQueue.push_back(inv.hash);
             vEraseQueue.push_back(inv.hash);
 
+            if (!setMonitorTx.empty())
+            {
+                if ((fMonitorAllTx) || pwalletMain->IsMine(tx))
+                {
+                    monitorTx(tx); // Push notification of new txn
+                }
+            }
+
             // Recursively process any orphan transactions that depended on this one
             for (unsigned int i = 0; i < vWorkQueue.size(); i++)
             {
@@ -3540,6 +3548,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                         mapAlreadyAskedFor.erase(CInv(MSG_TX, orphanHash));
                         vWorkQueue.push_back(orphanHash);
                         vEraseQueue.push_back(orphanHash);
+
+                        if (!setMonitorTx.empty())
+                        {
+                            if ((fMonitorAllTx) || pwalletMain->IsMine(orphanTx))
+                            {
+                                monitorTx(orphanTx); // Push notification of new txn
+                            }
+                        }
                     }
                     else if (!fMissingInputs2)
                     {

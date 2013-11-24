@@ -199,4 +199,8 @@ extern json_spirit::Value getblock(const json_spirit::Array& params, bool fHelp)
 extern json_spirit::Value gettxoutsetinfo(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value gettxout(const json_spirit::Array& params, bool fHelp);
 
+extern json_spirit::Value monitortx(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value monitorblocks(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value listmonitored(const json_spirit::Array& params, bool fHelp);
+
 #endif
