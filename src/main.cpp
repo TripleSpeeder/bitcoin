@@ -72,6 +72,9 @@ int64 nHPSTimerStart = 0;
 // Settings
 int64 nTransactionFee = 0;
 
+CCriticalSection cs_mapMonitored;
+set<string> setMonitorTx;
+set<string> setMonitorBlocks;
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1584,6 +1587,14 @@ static CCheckQueue<CScriptCheck> scriptcheckqueue(128);
 void ThreadScriptCheck() {
     RenameThread("bitcoin-scriptch");
     scriptcheckqueue.Thread();
+}
+
+void ThreadHttpPost() {
+    loop
+    {
+        boost::this_thread::interruption_point();
+        MilliSleep(100);
+    }
 }
 
 bool CBlock::ConnectBlock(CValidationState &state, CBlockIndex* pindex, CCoinsViewCache &view, bool fJustCheck)

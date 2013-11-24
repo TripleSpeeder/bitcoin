@@ -93,6 +93,9 @@ extern bool fBenchmark;
 extern int nScriptCheckThreads;
 extern bool fTxIndex;
 extern unsigned int nCoinCacheSize;
+extern CCriticalSection cs_mapMonitored;
+extern std::set<std::string> setMonitorTx;
+extern std::set<std::string> setMonitorBlocks;
 
 // Settings
 extern int64 nTransactionFee;
@@ -148,6 +151,8 @@ bool ProcessMessages(CNode* pfrom);
 bool SendMessages(CNode* pto, bool fSendTrickle);
 /** Run an instance of the script checking thread */
 void ThreadScriptCheck();
+/** Run an instance of the Http POST thread */
+void ThreadHttpPost();
 /** Run the miner threads */
 void GenerateBitcoins(bool fGenerate, CWallet* pwallet);
 /** Generate a new block, without valid proof-of-work */

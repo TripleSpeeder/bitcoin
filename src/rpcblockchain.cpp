@@ -228,4 +228,80 @@ Value gettxout(const Array& params, bool fHelp)
     return ret;
 }
 
+Value listmonitored(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "listmonitored\n"
+            "Returns list of urls that receive notification when new transactions/blocks are accepted.");
+
+    Array ret;
+    {
+        LOCK(cs_mapMonitored);
+
+        BOOST_FOREACH (const string& url, setMonitorBlocks)
+        {
+            Object item;
+            item.push_back(Pair("category", "block"));
+            item.push_back(Pair("url", url));
+            ret.push_back(item);
+        }
+
+        BOOST_FOREACH (const string& url, setMonitorTx)
+        {
+            Object item;
+            item.push_back(Pair("category", "tx"));
+            item.push_back(Pair("url", url));
+            ret.push_back(item);
+        }
+    }
+    return ret;
+}
+
+Value monitortx(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 3)
+        throw runtime_error(
+            "monitortx <url> [monitor=true]\n"
+            "POST transaction information to <url> as transactions are sent/received.\n"
+            "[monitor] true will start monitoring, false will stop.");
+    string url = params[0].get_str();
+    bool fMonitor = true;
+    if (params.size() > 1)
+        fMonitor = params[1].get_bool();
+
+    {
+        LOCK(cs_mapMonitored);
+        if (!fMonitor)
+            setMonitorTx.erase(url);
+        else
+            setMonitorTx.insert(url);
+        // WriteSetting("monitor_tx", setMonitorTx);
+    }
+
+    return Value::null;
+}
+
+Value monitorblocks(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 3)
+        throw runtime_error(
+            "monitorblocks <url> [monitor=true]\n"
+            "POST block information to <url> as blocks are added to the block chain.\n"
+            "[monitor] true will start monitoring, false will stop.");
+        string url = params[0].get_str();
+    bool fMonitor = true;
+    if (params.size() > 1)
+        fMonitor = params[1].get_bool();
+
+    {
+        LOCK(cs_mapMonitored);
+        if (!fMonitor)
+            setMonitorBlocks.erase(url);
+        else
+            setMonitorBlocks.insert(url);
+        //WriteSetting("monitor_block", setMonitorBlocks);
+    }
+    return Value::null;
+}
 

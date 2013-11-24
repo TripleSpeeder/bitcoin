@@ -262,6 +262,9 @@ static const CRPCCommand vRPCCommands[] =
     { "gettxout",               &gettxout,               true,      false },
     { "lockunspent",            &lockunspent,            false,     false },
     { "listlockunspent",        &listlockunspent,        false,     false },
+    { "monitortx",              &monitortx,              true,      false },
+    { "monitorblocks",          &monitorblocks,          true,      false },
+    { "listmonitored",          &listmonitored,          true,      false },
 };
 
 CRPCTable::CRPCTable()
@@ -1185,7 +1188,8 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "lockunspent"            && n > 0) ConvertTo<bool>(params[0]);
     if (strMethod == "lockunspent"            && n > 1) ConvertTo<Array>(params[1]);
     if (strMethod == "importprivkey"          && n > 2) ConvertTo<bool>(params[2]);
-
+    if (strMethod == "monitortx"              && n > 1) ConvertTo<bool>(params[1]);
+    if (strMethod == "monitorblocks"          && n > 1) ConvertTo<bool>(params[1]);
     return params;
 }
 

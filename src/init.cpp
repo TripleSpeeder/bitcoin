@@ -1062,7 +1062,27 @@ bool AppInit2(boost::thread_group& threadGroup)
     printf("Loaded %i addresses from peers.dat  %"PRI64d"ms\n",
            addrman.size(), GetTimeMillis() - nStart);
 
-    // ********************************************************* Step 11: start node
+    // ********************************************************* Step 11: load notification settings
+
+    if (mapArgs.count("-monitortx"))
+    {
+        BOOST_FOREACH(string strUrl, mapMultiArgs["-monitortx"])
+        {
+            setMonitorTx.insert(strUrl);
+            printf("Transaction monitoring enabled for %s\n", strUrl.c_str());
+        }
+    }
+
+    if (mapArgs.count("-monitorblocks"))
+    {
+        BOOST_FOREACH(string strUrl, mapMultiArgs["-monitorblocks"])
+        {
+            setMonitorBlocks.insert(strUrl);
+            printf("Block monitoring enabled for %s\n", strUrl.c_str());
+        }
+    }
+
+    // ********************************************************* Step 12: start node
 
     if (!CheckDiskSpace())
         return false;
@@ -1096,6 +1116,9 @@ bool AppInit2(boost::thread_group& threadGroup)
 
     // Run a thread to flush wallet periodically
     threadGroup.create_thread(boost::bind(&ThreadFlushWalletDB, boost::ref(pwalletMain->strWalletFile)));
+
+    // Start notification thread
+    threadGroup.create_thread(boost::bind(&TraceThread<void (*)()>, "http POST", &ThreadHttpPost));
 
     return !fRequestShutdown;
 }
