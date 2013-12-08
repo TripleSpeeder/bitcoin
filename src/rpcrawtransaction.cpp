@@ -101,7 +101,7 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
             COutPoint prevout = txin.prevout;
             CTransaction txPrev;
             uint256 hashBlock = 0;
-            if (GetTransaction(prevout.hash, txPrev, hashBlock))
+            if (GetTransaction(prevout.hash, txPrev, hashBlock, true))
             {
                 const CTxOut& txout = txPrev.vout[prevout.n];
                 in.push_back(Pair("value", ValueFromAmount(txout.nValue)));
