@@ -10,6 +10,7 @@ using namespace json_spirit;
 using namespace std;
 
 void ScriptPubKeyToJSON(const CScript& scriptPubKey, Object& out);
+void TxToJSON(const CTransaction&, const uint256, Object&);
 
 double GetDifficulty(const CBlockIndex* blockindex)
 {
@@ -54,9 +55,13 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
     result.push_back(Pair("height", blockindex->nHeight));
     result.push_back(Pair("version", block.nVersion));
     result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
-    Array txs;
+    // Begin TripleSpeeder modification
+    // I want to get all contained transactions of a block included in json format
+    Object txs;
+    uint256 hashBlock = 0;
     BOOST_FOREACH(const CTransaction&tx, block.vtx)
-        txs.push_back(tx.GetHash().GetHex());
+        TxToJSON(tx, hashBlock, txs);
+    // End TripleSpeeder modification
     result.push_back(Pair("tx", txs));
     result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
     result.push_back(Pair("nonce", (boost::uint64_t)block.nNonce));
