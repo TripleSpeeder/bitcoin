@@ -57,10 +57,14 @@ Object blockToJSON(const CBlock& block, const CBlockIndex* blockindex)
     result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
     // Begin TripleSpeeder modification
     // I want to get all contained transactions of a block included in json format
-    Object txs;
+    Array txs;
     uint256 hashBlock = 0;
     BOOST_FOREACH(const CTransaction&tx, block.vtx)
-        TxToJSON(tx, hashBlock, txs);
+    {
+        Object jsontx;
+        TxToJSON(tx, hashBlock, jsontx);
+        txs.push_back(jsontx);
+    }
     // End TripleSpeeder modification
     result.push_back(Pair("tx", txs));
     result.push_back(Pair("time", (boost::int64_t)block.GetBlockTime()));
